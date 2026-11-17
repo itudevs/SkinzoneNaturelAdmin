@@ -30,17 +30,10 @@ import PageLayout from "examples/LayoutContainers/PageLayout";
 // Authentication pages components
 import Footer from "layouts/authentication/components/Footer";
 
-function BasicLayout({ image, children }) {
+function BasicLayout({ image, children, hideBranding, greenTheme }) {
   return (
     <PageLayout>
-      <DefaultNavbar
-        action={{
-          type: "external",
-          route: "https://creative-tim.com/product/material-dashboard-react",
-          label: "free download",
-          color: "dark",
-        }}
-      />
+      {!hideBranding && <DefaultNavbar />}
       <MDBox
         position="absolute"
         width="100%"
@@ -49,8 +42,8 @@ function BasicLayout({ image, children }) {
           backgroundImage: ({ functions: { linearGradient, rgba }, palette: { gradients } }) =>
             image &&
             `${linearGradient(
-              rgba(gradients.dark.main, 0.6),
-              rgba(gradients.dark.state, 0.6)
+              rgba((greenTheme ? gradients.primary : gradients.dark).main, 0.6),
+              rgba((greenTheme ? gradients.primary : gradients.dark).state, 0.6)
             )}, url(${image})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
@@ -64,7 +57,7 @@ function BasicLayout({ image, children }) {
           </Grid>
         </Grid>
       </MDBox>
-      <Footer light />
+      {!hideBranding && <Footer light />}
     </PageLayout>
   );
 }
@@ -73,6 +66,8 @@ function BasicLayout({ image, children }) {
 BasicLayout.propTypes = {
   image: PropTypes.string.isRequired,
   children: PropTypes.node.isRequired,
+  hideBranding: PropTypes.bool,
+  greenTheme: PropTypes.bool,
 };
 
 export default BasicLayout;

@@ -22,14 +22,6 @@ import { Link } from "react-router-dom";
 // @mui material components
 import Card from "@mui/material/Card";
 import Switch from "@mui/material/Switch";
-import Grid from "@mui/material/Grid";
-import MuiLink from "@mui/material/Link";
-
-// @mui icons
-import FacebookIcon from "@mui/icons-material/Facebook";
-import GitHubIcon from "@mui/icons-material/GitHub";
-import GoogleIcon from "@mui/icons-material/Google";
-
 // Material Dashboard 2 React components
 import MDBox from "components/MDBox";
 import MDTypography from "components/MDTypography";
@@ -48,13 +40,13 @@ function Basic() {
   const handleSetRememberMe = () => setRememberMe(!rememberMe);
 
   return (
-    <BasicLayout image={bgImage}>
+    <BasicLayout image={bgImage} hideBranding greenTheme>
       <Card>
         <MDBox
           variant="gradient"
-          bgColor="info"
+          bgColor="primary"
           borderRadius="lg"
-          coloredShadow="info"
+          coloredShadow="primary"
           mx={2}
           mt={-3}
           p={2}
@@ -64,23 +56,6 @@ function Basic() {
           <MDTypography variant="h4" fontWeight="medium" color="white" mt={1}>
             Sign in
           </MDTypography>
-          <Grid container spacing={3} justifyContent="center" sx={{ mt: 1, mb: 2 }}>
-            <Grid item xs={2}>
-              <MDTypography component={MuiLink} href="#" variant="body1" color="white">
-                <FacebookIcon color="inherit" />
-              </MDTypography>
-            </Grid>
-            <Grid item xs={2}>
-              <MDTypography component={MuiLink} href="#" variant="body1" color="white">
-                <GitHubIcon color="inherit" />
-              </MDTypography>
-            </Grid>
-            <Grid item xs={2}>
-              <MDTypography component={MuiLink} href="#" variant="body1" color="white">
-                <GoogleIcon color="inherit" />
-              </MDTypography>
-            </Grid>
-          </Grid>
         </MDBox>
         <MDBox pt={4} pb={3} px={3}>
           <MDBox component="form" role="form">
@@ -103,7 +78,7 @@ function Basic() {
               </MDTypography>
             </MDBox>
             <MDBox mt={4} mb={1}>
-              <MDButton variant="gradient" color="info" fullWidth>
+              <MDButton variant="gradient" color="primary" fullWidth>
                 sign in
               </MDButton>
             </MDBox>
@@ -114,7 +89,7 @@ function Basic() {
                   component={Link}
                   to="/authentication/sign-up"
                   variant="button"
-                  color="info"
+                  color="primary"
                   fontWeight="medium"
                   textGradient
                 >
@@ -122,6 +97,9 @@ function Basic() {
                 </MDTypography>
               </MDTypography>
             </MDBox>
+            <MDTypography display="block" variant="caption" color="text" textAlign="center" mt={2}>
+              Copyright Skinzone Naturel. Developed by StackedTech PTY (LTD)
+            </MDTypography>
           </MDBox>
         </MDBox>
       </Card>

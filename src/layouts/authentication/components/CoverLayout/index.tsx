@@ -31,18 +31,10 @@ import PageLayout from "examples/LayoutContainers/PageLayout";
 // Authentication layout components
 import Footer from "layouts/authentication/components/Footer";
 
-function CoverLayout({ coverHeight, image, children }) {
+function CoverLayout({ coverHeight, image, children, hideBranding, greenTheme }) {
   return (
     <PageLayout>
-      <DefaultNavbar
-        action={{
-          type: "external",
-          route: "https://creative-tim.com/product/material-dashboard-react",
-          label: "free download",
-        }}
-        transparent
-        light
-      />
+      {!hideBranding && <DefaultNavbar transparent light />}
       <MDBox
         width="calc(100% - 2rem)"
         minHeight={coverHeight}
@@ -55,8 +47,8 @@ function CoverLayout({ coverHeight, image, children }) {
           backgroundImage: ({ functions: { linearGradient, rgba }, palette: { gradients } }) =>
             image &&
             `${linearGradient(
-              rgba(gradients.dark.main, 0.4),
-              rgba(gradients.dark.state, 0.4)
+              rgba((greenTheme ? gradients.primary : gradients.dark).main, 0.4),
+              rgba((greenTheme ? gradients.primary : gradients.dark).state, 0.4)
             )}, url(${image})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
@@ -70,7 +62,7 @@ function CoverLayout({ coverHeight, image, children }) {
           </Grid>
         </Grid>
       </MDBox>
-      <Footer />
+      {!hideBranding && <Footer />}
     </PageLayout>
   );
 }
@@ -78,6 +70,8 @@ function CoverLayout({ coverHeight, image, children }) {
 // Setting default props for the CoverLayout
 CoverLayout.defaultProps = {
   coverHeight: "35vh",
+  hideBranding: false,
+  greenTheme: false,
 };
 
 // Typechecking props for the CoverLayout
@@ -85,6 +79,8 @@ CoverLayout.propTypes = {
   coverHeight: PropTypes.string,
   image: PropTypes.string.isRequired,
   children: PropTypes.node.isRequired,
+  hideBranding: PropTypes.bool,
+  greenTheme: PropTypes.bool,
 };
 
 export default CoverLayout;

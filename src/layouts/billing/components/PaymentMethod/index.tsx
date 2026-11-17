@@ -26,8 +26,7 @@ import MDTypography from "components/MDTypography";
 import MDButton from "components/MDButton";
 
 // Images
-import masterCardLogo from "assets/images/logos/mastercard.png";
-import visaLogo from "assets/images/logos/visa.png";
+import skinzoneLightLogo from "assets/images/logos/SkinzoneLight.jpeg";
 
 // Material Dashboard 2 React context
 import { useMaterialUIController } from "context";
@@ -61,7 +60,13 @@ function PaymentMethod() {
                   `${borderWidth[1]} solid ${borderColor}`,
               }}
             >
-              <MDBox component="img" src={masterCardLogo} alt="master card" width="10%" mr={2} />
+              <MDBox
+                component="img"
+                src={skinzoneLightLogo}
+                alt="Skinzone Naturel logo"
+                width="10%"
+                mr={2}
+              />
               <MDTypography variant="h6" fontWeight="medium">
                 ****&nbsp;&nbsp;****&nbsp;&nbsp;****&nbsp;&nbsp;7852
               </MDTypography>
@@ -86,7 +91,13 @@ function PaymentMethod() {
                   `${borderWidth[1]} solid ${borderColor}`,
               }}
             >
-              <MDBox component="img" src={visaLogo} alt="master card" width="10%" mr={2} />
+              <MDBox
+                component="img"
+                src={skinzoneLightLogo}
+                alt="Skinzone Naturel logo"
+                width="10%"
+                mr={2}
+              />
               <MDTypography variant="h6" fontWeight="medium">
                 ****&nbsp;&nbsp;****&nbsp;&nbsp;****&nbsp;&nbsp;5248
               </MDTypography>

@@ -22,7 +22,7 @@ Coded by www.creative-tim.com
 
 const colors = {
   background: {
-    default: "#f0f2f5",
+    default: "#f7fbf8",
   },
 
   text: {
@@ -46,8 +46,8 @@ const colors = {
   },
 
   primary: {
-    main: "#e91e63",
-    focus: "#e91e63",
+    main: "#166534",
+    focus: "#14532d",
   },
 
   secondary: {
@@ -56,8 +56,8 @@ const colors = {
   },
 
   info: {
-    main: "#1A73E8",
-    focus: "#1662C4",
+    main: "#0f766e",
+    focus: "#0d5f59",
   },
 
   success: {
@@ -99,8 +99,8 @@ const colors = {
 
   gradients: {
     primary: {
-      main: "#EC407A",
-      state: "#D81B60",
+      main: "#22c55e",
+      state: "#166534",
     },
 
     secondary: {
@@ -109,8 +109,8 @@ const colors = {
     },
 
     info: {
-      main: "#49a3f1",
-      state: "#1A73E8",
+      main: "#2dd4bf",
+      state: "#0f766e",
     },
 
     success: {

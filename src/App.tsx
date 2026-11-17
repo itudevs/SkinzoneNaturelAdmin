@@ -51,8 +51,8 @@ import routes from "routes";
 import { useMaterialUIController, setMiniSidenav, setOpenConfigurator } from "context";
 
 // Images
-import brandWhite from "assets/images/logo-ct.png";
-import brandDark from "assets/images/logo-ct-dark.png";
+import brandLight from "assets/images/logos/SkinzoneLight.jpeg";
+import brandDark from "assets/images/logos/SkinzoneLight.jpeg";
 
 export default function App() {
   const [controller, dispatch] = useMaterialUIController();
@@ -155,8 +155,8 @@ export default function App() {
           <>
             <Sidenav
               color={sidenavColor}
-              brand={(transparentSidenav && !darkMode) || whiteSidenav ? brandDark : brandWhite}
-              brandName="Material Dashboard 2"
+              brand={(transparentSidenav && !darkMode) || whiteSidenav ? brandDark : brandLight}
+              brandName="Skinzone Naturel"
               routes={routes}
               onMouseEnter={handleOnMouseEnter}
               onMouseLeave={handleOnMouseLeave}
@@ -179,8 +179,8 @@ export default function App() {
         <>
           <Sidenav
             color={sidenavColor}
-            brand={(transparentSidenav && !darkMode) || whiteSidenav ? brandDark : brandWhite}
-            brandName="Material Dashboard 2"
+            brand={(transparentSidenav && !darkMode) || whiteSidenav ? brandDark : brandLight}
+            brandName="Skinzone Naturel"
             routes={routes}
             onMouseEnter={handleOnMouseEnter}
             onMouseLeave={handleOnMouseLeave}

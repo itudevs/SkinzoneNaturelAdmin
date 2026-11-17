@@ -35,11 +35,11 @@ import bgImage from "assets/images/bg-sign-up-cover.jpeg";
 
 function Cover() {
   return (
-    <CoverLayout image={bgImage}>
+    <CoverLayout image={bgImage} hideBranding greenTheme>
       <Card>
         <MDBox
           variant="gradient"
-          bgColor="info"
+          bgColor="primary"
           borderRadius="lg"
           coloredShadow="success"
           mx={2}
@@ -52,7 +52,7 @@ function Cover() {
             Join us today
           </MDTypography>
           <MDTypography display="block" variant="button" color="white" my={1}>
-            Enter your email and password to register
+            Create your Skinzone Naturel account
           </MDTypography>
         </MDBox>
         <MDBox pt={4} pb={3} px={3}>
@@ -61,10 +61,19 @@ function Cover() {
               <MDInput type="text" label="Name" variant="standard" fullWidth />
             </MDBox>
             <MDBox mb={2}>
+              <MDInput type="text" label="Surname" variant="standard" fullWidth />
+            </MDBox>
+            <MDBox mb={2}>
+              <MDInput type="tel" label="Contact Number" variant="standard" fullWidth />
+            </MDBox>
+            <MDBox mb={2}>
               <MDInput type="email" label="Email" variant="standard" fullWidth />
             </MDBox>
             <MDBox mb={2}>
               <MDInput type="password" label="Password" variant="standard" fullWidth />
+            </MDBox>
+            <MDBox mb={2}>
+              <MDInput type="password" label="Confirm Password" variant="standard" fullWidth />
             </MDBox>
             <MDBox display="flex" alignItems="center" ml={-1}>
               <Checkbox />
@@ -81,15 +90,15 @@ function Cover() {
                 href="#"
                 variant="button"
                 fontWeight="bold"
-                color="info"
+                color="primary"
                 textGradient
               >
                 Terms and Conditions
               </MDTypography>
             </MDBox>
             <MDBox mt={4} mb={1}>
-              <MDButton variant="gradient" color="info" fullWidth>
-                sign in
+              <MDButton variant="gradient" color="primary" fullWidth>
+                sign up
               </MDButton>
             </MDBox>
             <MDBox mt={3} mb={1} textAlign="center">
@@ -99,7 +108,7 @@ function Cover() {
                   component={Link}
                   to="/authentication/sign-in"
                   variant="button"
-                  color="info"
+                  color="primary"
                   fontWeight="medium"
                   textGradient
                 >
@@ -107,6 +116,9 @@ function Cover() {
                 </MDTypography>
               </MDTypography>
             </MDBox>
+            <MDTypography display="block" variant="caption" color="text" textAlign="center" mt={2}>
+              Copyright Skinzone Naturel. Developed by StackedTech PTY (LTD)
+            </MDTypography>
           </MDBox>
         </MDBox>
       </Card>

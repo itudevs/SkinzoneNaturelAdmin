@@ -27,7 +27,7 @@ import MDTypography from "components/MDTypography";
 
 // Images
 import pattern from "assets/images/illustrations/pattern-tree.svg";
-import masterCardLogo from "assets/images/logos/mastercard.png";
+import skinzoneLightLogo from "assets/images/logos/SkinzoneLight.jpeg";
 
 function MasterCard({ color, number, holder, expires }) {
   const numbers = [...`${number}`];
@@ -97,7 +97,13 @@ function MasterCard({ color, number, holder, expires }) {
             </MDBox>
           </MDBox>
           <MDBox display="flex" justifyContent="flex-end" width="20%">
-            <MDBox component="img" src={masterCardLogo} alt="master card" width="60%" mt={1} />
+            <MDBox
+              component="img"
+              src={skinzoneLightLogo}
+              alt="Skinzone Naturel logo"
+              width="60%"
+              mt={1}
+            />
           </MDBox>
         </MDBox>
       </MDBox>
