@@ -97,7 +97,13 @@ function Cover() {
               </MDTypography>
             </MDBox>
             <MDBox mt={4} mb={1}>
-              <MDButton variant="gradient" color="primary" fullWidth>
+              <MDButton
+                component={Link}
+                to="/authentication/sign-up-confirmation"
+                variant="gradient"
+                color="primary"
+                fullWidth
+              >
                 sign up
               </MDButton>
             </MDBox>

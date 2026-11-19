@@ -38,7 +38,11 @@ Coded by www.creative-tim.com
 
 // Material Dashboard 2 React layouts
 import Dashboard from "layouts/dashboard";
-import Tables from "layouts/tables";
+import Clients from "layouts/clients";
+import Stock from "layouts/stock";
+import Treatments from "layouts/treatments";
+import Sales from "layouts/sales";
+import Expenditures from "layouts/expenditures";
 import Billing from "layouts/billing";
 import RTL from "layouts/rtl";
 import Notifications from "layouts/notifications";
@@ -60,16 +64,49 @@ const routes = [
   },
   {
     type: "collapse",
-    name: "Tables",
-    key: "tables",
+    name: "Clients",
+    key: "clients",
     icon: <Icon fontSize="small">table_view</Icon>,
-    route: "/tables",
-    component: <Tables />,
+    route: "/clients",
+    component: <Clients />,
+  },
+  {
+    type: "collapse",
+    name: "Stock",
+    key: "stock",
+    icon: <Icon fontSize="small">inventory_2</Icon>,
+    route: "/stock",
+    component: <Stock />,
+  },
+  {
+    type: "collapse",
+    name: "Treatments",
+    key: "treatments",
+    icon: <Icon fontSize="small">spa</Icon>,
+    route: "/treatments",
+    component: <Treatments />,
+  },
+  {
+    type: "collapse",
+    name: "Sales",
+    key: "sales",
+    icon: <Icon fontSize="small">point_of_sale</Icon>,
+    route: "/sales",
+    component: <Sales />,
+  },
+  {
+    type: "collapse",
+    name: "Expenditures",
+    key: "expenditures",
+    icon: <Icon fontSize="small">payments</Icon>,
+    route: "/expenditures",
+    component: <Expenditures />,
   },
   {
     type: "collapse",
     name: "Billing",
     key: "billing",
+    showInSidenav: false,
     icon: <Icon fontSize="small">receipt_long</Icon>,
     route: "/billing",
     component: <Billing />,
@@ -78,6 +115,7 @@ const routes = [
     type: "collapse",
     name: "RTL",
     key: "rtl",
+    showInSidenav: false,
     icon: <Icon fontSize="small">format_textdirection_r_to_l</Icon>,
     route: "/rtl",
     component: <RTL />,
@@ -86,6 +124,7 @@ const routes = [
     type: "collapse",
     name: "Notifications",
     key: "notifications",
+    showInSidenav: false,
     icon: <Icon fontSize="small">notifications</Icon>,
     route: "/notifications",
     component: <Notifications />,
@@ -102,6 +141,7 @@ const routes = [
     type: "collapse",
     name: "Sign In",
     key: "sign-in",
+    showInSidenav: false,
     icon: <Icon fontSize="small">login</Icon>,
     route: "/authentication/sign-in",
     component: <SignIn />,
@@ -110,6 +150,7 @@ const routes = [
     type: "collapse",
     name: "Sign Up",
     key: "sign-up",
+    showInSidenav: false,
     icon: <Icon fontSize="small">assignment</Icon>,
     route: "/authentication/sign-up",
     component: <SignUp />,
