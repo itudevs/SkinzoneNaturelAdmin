@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
@@ -14,20 +14,47 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { api } from "layouts/authentication/apiClient";
+import { LoginUserDto } from "Dtos";
 
 function Profile() {
   const [profile, setProfile] = useState({
-    userId: "USR-001",
-    name: "Richard",
-    surname: "Davis",
-    email: "richard.davis@example.com",
-    contactNumber: "071 123 4567",
+    name: "",
+    surname: "",
+    email: "",
+    contactNumber: "",
   });
   const [passwords, setPasswords] = useState({
     newPassword: "",
     confirmPassword: "",
   });
   const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const token = localStorage.getItem("authToken") || sessionStorage.getItem("authToken");
+
+      if (!token) {
+        setMessage({ color: "error", text: "You must sign in to view your profile." });
+        return;
+      }
+
+      try {
+        const user = await api.get<LoginUserDto>("/user/user", token);
+        setProfile({
+          name: user.Name || "",
+          surname: user.Surname || "",
+          email: user.Email || "",
+          contactNumber: user.ContactNumber || "",
+        });
+      } catch (error) {
+        const text = error instanceof Error ? error.message : "Could not load your profile.";
+        setMessage({ color: "error", text });
+      }
+    };
+
+    loadProfile();
+  }, []);
 
   const updateProfile = (field) => (event) =>
     setProfile((current) => ({ ...current, [field]: event.target.value }));
@@ -62,7 +89,7 @@ function Profile() {
 
     setMessage({ color: "success", text: "Profile details updated successfully." });
   };
-
+  //TODO:Itu Update password implementation
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -90,9 +117,6 @@ function Profile() {
               User Information
             </MDTypography>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <MDInput label="User ID" value={profile.userId} fullWidth disabled />
-              </Grid>
               <Grid item xs={12} md={6}>
                 <MDInput
                   label="Name"

@@ -18,6 +18,7 @@ import { useState } from "react";
 
 // react-router-dom components
 import { Link, useNavigate } from "react-router-dom";
+import { login } from "./login";
 
 // @mui material components
 import Card from "@mui/material/Card";
@@ -39,10 +40,10 @@ function Basic() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
-
   const handleSetRememberMe = () => setRememberMe(!rememberMe);
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     if (!email.trim() || !password.trim()) {
@@ -51,7 +52,31 @@ function Basic() {
     }
 
     setLoginError("");
-    navigate("/dashboard");
+    setIsSubmitting(true);
+
+    try {
+      const result = await login(email.trim(), password);
+
+      if (rememberMe) {
+        localStorage.setItem("authToken", result.idToken);
+        localStorage.setItem("currentUser", JSON.stringify(result.user));
+      } else {
+        sessionStorage.setItem("authToken", result.idToken);
+        sessionStorage.setItem("currentUser", JSON.stringify(result.user));
+      }
+
+      navigate("/dashboard");
+    } catch (error) {
+      const message =
+        error && error.code === "auth/invalid-credential"
+          ? "The email or password is incorrect."
+          : error instanceof Error
+            ? error.message
+            : "Could not sign in.";
+      setLoginError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -110,8 +135,14 @@ function Basic() {
               </MDTypography>
             </MDBox>
             <MDBox mt={4} mb={1}>
-              <MDButton type="submit" variant="gradient" color="primary" fullWidth>
-                sign in
+              <MDButton
+                type="submit"
+                variant="gradient"
+                color="primary"
+                fullWidth
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "signing in..." : "sign in"}
               </MDButton>
             </MDBox>
             <MDBox mt={3} mb={1} textAlign="center">

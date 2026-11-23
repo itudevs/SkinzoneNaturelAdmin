@@ -1,0 +1,51 @@
+/**@Copilot is the Author  */
+type HttpMethod = "GET" | "POST" | "PUT";
+
+interface RequestOptions<TBody = unknown> {
+  method: HttpMethod;
+  body?: TBody;
+  token?: string | null;
+  headers?: Record<string, string>;
+}
+
+const BASE_URL = "http://localhost:8080";
+
+async function request<TResponse, TBody = unknown>(
+  endpoint: string,
+  { method, body, token, headers = {} }: RequestOptions<TBody>
+): Promise<TResponse> {
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+      ...headers,
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+  }
+
+  // Handle empty responses (e.g., 204 No Content)
+  if (response.status === 204) {
+    return undefined as TResponse;
+  }
+
+  return response.json() as Promise<TResponse>;
+}
+
+export const api = {
+  get: <TResponse>(endpoint: string, token?: string | null) =>
+    request<TResponse>(endpoint, { method: "GET", token }),
+
+  post: <TResponse, TBody = unknown>(endpoint: string, body: TBody, token?: string | null) =>
+    request<TResponse, TBody>(endpoint, { method: "POST", body, token }),
+
+  put: <TResponse, TBody = unknown>(endpoint: string, body: TBody, token?: string | null) =>
+    request<TResponse, TBody>(endpoint, { method: "PUT", body, token }),
+};

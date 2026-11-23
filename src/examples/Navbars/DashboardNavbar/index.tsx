@@ -17,7 +17,9 @@ Coded by www.creative-tim.com
 import { useState, useEffect } from "react";
 
 // react-router components
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth } from "FirebaseLogic/firebase";
 
 // prop-types is a library for typechecking of props.
 import PropTypes from "prop-types";
@@ -49,6 +51,7 @@ import { useMaterialUIController, setTransparentNavbar, setMiniSidenav } from "c
 function DashboardNavbar({ absolute, light, isMini }) {
   const [navbarType, setNavbarType] = useState();
   const [controller, dispatch] = useMaterialUIController();
+  const navigate = useNavigate();
   const { miniSidenav, transparentNavbar, fixedNavbar, darkMode } = controller;
   const route = useLocation().pathname.split("/").slice(1);
 
@@ -80,6 +83,18 @@ function DashboardNavbar({ absolute, light, isMini }) {
 
   const handleMiniSidenav = () => setMiniSidenav(dispatch, !miniSidenav);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } finally {
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("currentUser");
+      sessionStorage.removeItem("authToken");
+      sessionStorage.removeItem("currentUser");
+      navigate("/authentication/sign-in", { replace: true });
+    }
+  };
+
   // Styles for the navbar icons
   const iconsStyle = ({ palette: { dark, white, text }, functions: { rgba } }) => ({
     color: () => {
@@ -106,11 +121,24 @@ function DashboardNavbar({ absolute, light, isMini }) {
         {isMini ? null : (
           <MDBox sx={(theme) => navbarRow(theme, { isMini })}>
             <MDBox color={light ? "white" : "inherit"}>
-              <Link to="/authentication/sign-in/basic">
-                <IconButton sx={navbarIconButton} size="small" disableRipple>
-                  <Icon sx={iconsStyle}>account_circle</Icon>
-                </IconButton>
-              </Link>
+              <IconButton
+                sx={navbarIconButton}
+                size="small"
+                disableRipple
+                onClick={() => navigate("/profile")}
+                title="Profile"
+              >
+                <Icon sx={iconsStyle}>account_circle</Icon>
+              </IconButton>
+              <IconButton
+                sx={navbarIconButton}
+                size="small"
+                disableRipple
+                onClick={handleLogout}
+                title="Logout"
+              >
+                <Icon sx={iconsStyle}>logout</Icon>
+              </IconButton>
               <IconButton
                 size="small"
                 disableRipple
