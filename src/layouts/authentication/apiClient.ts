@@ -8,7 +8,7 @@ interface RequestOptions<TBody = unknown> {
   headers?: Record<string, string>;
 }
 
-const BASE_URL = "http://localhost:8080";
+const BASE_URL = (process.env.REACT_APP_API_BASE_URL || "http://localhost:8080").replace(/\/$/, "");
 
 async function request<TResponse, TBody = unknown>(
   endpoint: string,

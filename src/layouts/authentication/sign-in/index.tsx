@@ -57,13 +57,12 @@ function Basic() {
     try {
       const result = await login(email.trim(), password);
 
-      if (rememberMe) {
-        localStorage.setItem("authToken", result.idToken);
-        localStorage.setItem("currentUser", JSON.stringify(result.user));
-      } else {
-        sessionStorage.setItem("authToken", result.idToken);
-        sessionStorage.setItem("currentUser", JSON.stringify(result.user));
-      }
+      sessionStorage;
+      const otherStorage = rememberMe ? sessionStorage : localStorage;
+      otherStorage.removeItem("authToken");
+      otherStorage.removeItem("currentUser");
+      storage.setItem("authToken", result.idToken);
+      storage.setItem("currentUser", JSON.stringify(result.user));
 
       navigate("/dashboard");
     } catch (error) {
@@ -71,8 +70,8 @@ function Basic() {
         error && error.code === "auth/invalid-credential"
           ? "The email or password is incorrect."
           : error instanceof Error
-            ? error.message
-            : "Could not sign in.";
+          ? error.message
+          : "Could not sign in.";
       setLoginError(message);
     } finally {
       setIsSubmitting(false);
