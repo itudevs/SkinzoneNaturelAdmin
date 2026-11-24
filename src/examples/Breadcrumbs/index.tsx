@@ -30,6 +30,7 @@ import MDTypography from "components/MDTypography";
 
 function Breadcrumbs({ icon, title, route, light }) {
   const routes = route.slice(0, -1);
+  const displayTitle = title === "stock" ? "Stock List" : title.replace("-", " ");
 
   return (
     <MDBox mr={{ xs: 0, xl: 8 }}>
@@ -73,7 +74,7 @@ function Breadcrumbs({ icon, title, route, light }) {
           color={light ? "white" : "dark"}
           sx={{ lineHeight: 0 }}
         >
-          {title.replace("-", " ")}
+          {displayTitle}
         </MDTypography>
       </MuiBreadcrumbs>
       <MDTypography
@@ -83,7 +84,7 @@ function Breadcrumbs({ icon, title, route, light }) {
         color={light ? "white" : "dark"}
         noWrap
       >
-        {title.replace("-", " ")}
+        {displayTitle}
       </MDTypography>
     </MDBox>
   );

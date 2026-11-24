@@ -72,7 +72,7 @@ const routes = [
   },
   {
     type: "collapse",
-    name: "Stock",
+    name: "Stock List",
     key: "stock",
     icon: <Icon fontSize="small">inventory_2</Icon>,
     route: "/stock",
