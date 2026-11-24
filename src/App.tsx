@@ -46,6 +46,7 @@ import createCache from "@emotion/cache";
 
 // Material Dashboard 2 React routes
 import routes from "routes";
+import SignUpConfirmation from "layouts/authentication/sign-up-confirmation";
 
 // Material Dashboard 2 React contexts
 import { useMaterialUIController, setMiniSidenav, setOpenConfigurator } from "context";
@@ -168,6 +169,8 @@ export default function App() {
         {layout === "vr" && <Configurator />}
         <Routes>
           {getRoutes(routes)}
+          <Route path="/" element={<Navigate to="/authentication/sign-in" replace />} />
+          <Route path="/authentication/sign-up-confirmation" element={<SignUpConfirmation />} />
           <Route path="*" element={<Navigate to="/dashboard" />} />
         </Routes>
       </ThemeProvider>
@@ -192,6 +195,8 @@ export default function App() {
       {layout === "vr" && <Configurator />}
       <Routes>
         {getRoutes(routes)}
+        <Route path="/" element={<Navigate to="/authentication/sign-in" replace />} />
+        <Route path="/authentication/sign-up-confirmation" element={<SignUpConfirmation />} />
         <Route path="*" element={<Navigate to="/dashboard" />} />
       </Routes>
     </ThemeProvider>

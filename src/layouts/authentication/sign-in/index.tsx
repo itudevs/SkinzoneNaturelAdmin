@@ -17,7 +17,8 @@ Coded by www.creative-tim.com
 import { useState } from "react";
 
 // react-router-dom components
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { login } from "./login";
 
 // @mui material components
 import Card from "@mui/material/Card";
@@ -36,8 +37,47 @@ import bgImage from "assets/images/bg-sign-in-basic.jpeg";
 
 function Basic() {
   const [rememberMe, setRememberMe] = useState(false);
-
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
   const handleSetRememberMe = () => setRememberMe(!rememberMe);
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!email.trim() || !password.trim()) {
+      setLoginError("Enter both your email and password to continue.");
+      return;
+    }
+
+    setLoginError("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await login(email.trim(), password);
+      /**
+      sessionStorage;
+      const otherStorage = rememberMe ? sessionStorage : localStorage;
+      otherStorage.removeItem("authToken");
+      otherStorage.removeItem("currentUser");
+      storage.setItem("authToken", result.idToken);
+      storage.setItem("currentUser", JSON.stringify(result.user));
+       remove this as token is retrieved with every request 
+       */
+      navigate("/dashboard");
+    } catch (error) {
+      const message =
+        error && error.code === "auth/invalid-credential"
+          ? "The email or password is incorrect."
+          : error instanceof Error
+          ? error.message
+          : "Could not sign in.";
+      setLoginError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <BasicLayout image={bgImage} hideBranding greenTheme>
@@ -58,13 +98,30 @@ function Basic() {
           </MDTypography>
         </MDBox>
         <MDBox pt={4} pb={3} px={3}>
-          <MDBox component="form" role="form">
+          <MDBox component="form" role="form" onSubmit={handleSubmit}>
             <MDBox mb={2}>
-              <MDInput type="email" label="Email" fullWidth />
+              <MDInput
+                type="email"
+                label="Email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                fullWidth
+              />
             </MDBox>
             <MDBox mb={2}>
-              <MDInput type="password" label="Password" fullWidth />
+              <MDInput
+                type="password"
+                label="Password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                fullWidth
+              />
             </MDBox>
+            {loginError && (
+              <MDTypography variant="caption" color="error">
+                {loginError}
+              </MDTypography>
+            )}
             <MDBox display="flex" alignItems="center" ml={-1}>
               <Switch checked={rememberMe} onChange={handleSetRememberMe} />
               <MDTypography
@@ -78,8 +135,14 @@ function Basic() {
               </MDTypography>
             </MDBox>
             <MDBox mt={4} mb={1}>
-              <MDButton variant="gradient" color="primary" fullWidth>
-                sign in
+              <MDButton
+                type="submit"
+                variant="gradient"
+                color="primary"
+                fullWidth
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "signing in..." : "sign in"}
               </MDButton>
             </MDBox>
             <MDBox mt={3} mb={1} textAlign="center">
