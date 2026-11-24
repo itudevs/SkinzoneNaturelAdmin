@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Card from "@mui/material/Card";
 import Dialog from "@mui/material/Dialog";
@@ -32,6 +32,7 @@ const initialStock = [
     dateReceived: "2026-11-01",
     amountAvailable: 12,
     clinicalPrice: 280,
+    retailPrice: 350,
     category: "GENOP",
   },
   {
@@ -40,6 +41,7 @@ const initialStock = [
     dateReceived: "2026-11-03",
     amountAvailable: 8,
     clinicalPrice: 650,
+    retailPrice: 780,
     category: "Lamelle",
   },
   {
@@ -48,6 +50,7 @@ const initialStock = [
     dateReceived: "2026-11-05",
     amountAvailable: 20,
     clinicalPrice: 450,
+    retailPrice: 550,
     category: "Fargon",
   },
   {
@@ -56,16 +59,29 @@ const initialStock = [
     dateReceived: "2026-11-08",
     amountAvailable: 15,
     clinicalPrice: 520,
+    retailPrice: 630,
     category: "Evolution",
   },
 ];
 
-const categories = ["GENOP", "Lamelle", "Fargon", "Evolution"];
+const initialCategories = ["GENOP", "Lamelle", "Fargon", "Evolution"];
+const ADD_CATEGORY = "__add_category";
 
 function Stock() {
   const [stockItems, setStockItems] = useState(initialStock);
+  const [categories, setCategories] = useState(() => {
+    try {
+      const savedCategories = JSON.parse(localStorage.getItem("stockCategories"));
+      return Array.isArray(savedCategories) ? savedCategories : initialCategories;
+    } catch {
+      return initialCategories;
+    }
+  });
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categoryTarget, setCategoryTarget] = useState("form");
   const [editingItemId, setEditingItemId] = useState(null);
   const [restockItem, setRestockItem] = useState(null);
   const [restockAmount, setRestockAmount] = useState("");
@@ -75,8 +91,13 @@ function Stock() {
     category: "",
     amountAvailable: "",
     clinicalPrice: "",
+    retailPrice: "",
   });
   const [message, setMessage] = useState(null);
+
+  useEffect(() => {
+    localStorage.setItem("stockCategories", JSON.stringify(categories));
+  }, [categories]);
   const filteredStockItems = stockItems.filter(
     (item) =>
       (categoryFilter === "All" || item.category === categoryFilter) &&
@@ -86,6 +107,40 @@ function Stock() {
   const updateForm = (field) => (event) =>
     setForm((current) => ({ ...current, [field]: event.target.value }));
 
+  const openAddCategoryDialog = (target) => {
+    setCategoryTarget(target);
+    setNewCategoryName("");
+    setCategoryDialogOpen(true);
+  };
+
+  const addCategory = () => {
+    const categoryName = newCategoryName.trim();
+
+    if (!categoryName) {
+      setMessage({ color: "error", text: "Enter a category name." });
+      return;
+    }
+
+    const existingCategory = categories.find(
+      (category) => category.toLowerCase() === categoryName.toLowerCase()
+    );
+
+    if (existingCategory) {
+      setMessage({ color: "error", text: "That category already exists." });
+      return;
+    }
+
+    setCategories((current) => [...current, categoryName]);
+    if (categoryTarget === "filter") {
+      setCategoryFilter(categoryName);
+    } else {
+      setForm((current) => ({ ...current, category: categoryName }));
+    }
+    setCategoryDialogOpen(false);
+    setNewCategoryName("");
+    setMessage({ color: "success", text: `${categoryName} category added successfully.` });
+  };
+
   const addStockItem = (event) => {
     event.preventDefault();
 
@@ -94,7 +149,8 @@ function Stock() {
       !form.dateReceived ||
       !form.category ||
       form.amountAvailable === "" ||
-      form.clinicalPrice === ""
+      form.clinicalPrice === "" ||
+      form.retailPrice === ""
     ) {
       setMessage({ color: "error", text: "Please complete every stock item detail." });
       return;
@@ -102,16 +158,19 @@ function Stock() {
 
     const amountAvailable = Number(form.amountAvailable);
     const clinicalPrice = Number(form.clinicalPrice);
+    const retailPrice = Number(form.retailPrice);
 
     if (
       !Number.isFinite(amountAvailable) ||
       amountAvailable < 0 ||
       !Number.isFinite(clinicalPrice) ||
-      clinicalPrice < 0
+      clinicalPrice < 0 ||
+      !Number.isFinite(retailPrice) ||
+      retailPrice < 0
     ) {
       setMessage({
         color: "error",
-        text: "Amount available and clinical price must be valid values.",
+        text: "Amount available and both prices must be valid values.",
       });
       return;
     }
@@ -127,6 +186,7 @@ function Stock() {
                 category: form.category,
                 amountAvailable,
                 clinicalPrice,
+                retailPrice,
               }
             : item
         )
@@ -143,6 +203,7 @@ function Stock() {
           category: form.category,
           amountAvailable,
           clinicalPrice,
+          retailPrice,
         },
       ]);
       setMessage({ color: "success", text: "Stock item added successfully." });
@@ -153,6 +214,7 @@ function Stock() {
       category: "",
       amountAvailable: "",
       clinicalPrice: "",
+      retailPrice: "",
     });
   };
 
@@ -164,6 +226,7 @@ function Stock() {
       category: item.category,
       amountAvailable: item.amountAvailable,
       clinicalPrice: item.clinicalPrice,
+      retailPrice: item.retailPrice ?? "",
     });
     setMessage(null);
   };
@@ -178,6 +241,7 @@ function Stock() {
         category: "",
         amountAvailable: "",
         clinicalPrice: "",
+        retailPrice: "",
       });
     }
     setMessage({ color: "success", text: `${item.name} was deleted successfully.` });
@@ -248,7 +312,13 @@ function Stock() {
                     <Select
                       value={categoryFilter}
                       label="Filter by category"
-                      onChange={(event) => setCategoryFilter(event.target.value)}
+                      onChange={(event) => {
+                        if (event.target.value === ADD_CATEGORY) {
+                          openAddCategoryDialog("filter");
+                        } else {
+                          setCategoryFilter(event.target.value);
+                        }
+                      }}
                       sx={{ minHeight: 56 }}
                     >
                       <MenuItem value="All">All categories</MenuItem>
@@ -257,6 +327,12 @@ function Stock() {
                           {category}
                         </MenuItem>
                       ))}
+                      <MenuItem value={ADD_CATEGORY}>
+                        <Icon fontSize="small" sx={{ mr: 1 }}>
+                          add
+                        </Icon>
+                        Add category
+                      </MenuItem>
                     </Select>
                   </FormControl>
                 </MDBox>
@@ -282,7 +358,7 @@ function Stock() {
                         </MDBox>
                         <MDBox display="flex" alignItems="center">
                           <MDTypography variant="button" fontWeight="medium" mr={1}>
-                            R{item.clinicalPrice.toFixed(2)}
+                            R{(item.retailPrice ?? item.clinicalPrice).toFixed(2)}
                           </MDTypography>
                           <IconButton
                             size="small"
@@ -355,7 +431,13 @@ function Stock() {
                       <Select
                         value={form.category}
                         label="Category"
-                        onChange={updateForm("category")}
+                        onChange={(event) => {
+                          if (event.target.value === ADD_CATEGORY) {
+                            openAddCategoryDialog("form");
+                          } else {
+                            updateForm("category")(event);
+                          }
+                        }}
                         sx={{ minHeight: 56 }}
                       >
                         {categories.map((category) => (
@@ -363,6 +445,12 @@ function Stock() {
                             {category}
                           </MenuItem>
                         ))}
+                        <MenuItem value={ADD_CATEGORY}>
+                          <Icon fontSize="small" sx={{ mr: 1 }}>
+                            add
+                          </Icon>
+                          Add category
+                        </MenuItem>
                       </Select>
                     </FormControl>
                   </MDBox>
@@ -382,6 +470,16 @@ function Stock() {
                       label="Clinical price"
                       value={form.clinicalPrice}
                       onChange={updateForm("clinicalPrice")}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      fullWidth
+                    />
+                  </MDBox>
+                  <MDBox mb={3}>
+                    <MDInput
+                      type="number"
+                      label="Retail price"
+                      value={form.retailPrice}
+                      onChange={updateForm("retailPrice")}
                       inputProps={{ min: 0, step: 0.01 }}
                       fullWidth
                     />
@@ -415,6 +513,47 @@ function Stock() {
           </Grid>
         </Grid>
       </MDBox>
+      <Dialog
+        open={categoryDialogOpen}
+        onClose={() => {
+          setCategoryDialogOpen(false);
+          setNewCategoryName("");
+        }}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Add category</DialogTitle>
+        <DialogContent>
+          <MDInput
+            label="Category name"
+            value={newCategoryName}
+            onChange={(event) => setNewCategoryName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addCategory();
+              }
+            }}
+            fullWidth
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <MDButton
+            variant="text"
+            color="dark"
+            onClick={() => {
+              setCategoryDialogOpen(false);
+              setNewCategoryName("");
+            }}
+          >
+            Cancel
+          </MDButton>
+          <MDButton variant="gradient" color="primary" onClick={addCategory}>
+            Add category
+          </MDButton>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={Boolean(restockItem)}
         onClose={() => {

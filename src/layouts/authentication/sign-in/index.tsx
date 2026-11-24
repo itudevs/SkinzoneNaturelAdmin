@@ -63,6 +63,7 @@ function Basic() {
       otherStorage.removeItem("currentUser");
       storage.setItem("authToken", result.idToken);
       storage.setItem("currentUser", JSON.stringify(result.user));
+       remove this as token is retrieved with every request 
        */
       navigate("/dashboard");
     } catch (error) {
