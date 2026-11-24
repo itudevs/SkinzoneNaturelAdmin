@@ -56,14 +56,14 @@ function Basic() {
 
     try {
       const result = await login(email.trim(), password);
-
+      /**
       sessionStorage;
       const otherStorage = rememberMe ? sessionStorage : localStorage;
       otherStorage.removeItem("authToken");
       otherStorage.removeItem("currentUser");
       storage.setItem("authToken", result.idToken);
       storage.setItem("currentUser", JSON.stringify(result.user));
-
+       */
       navigate("/dashboard");
     } catch (error) {
       const message =

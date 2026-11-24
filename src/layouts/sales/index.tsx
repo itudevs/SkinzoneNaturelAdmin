@@ -161,7 +161,11 @@ function Sales() {
       }
 
       reportSales = sales.filter((sale) => {
-        const saleDate = sale.transactionDate.slice(0, 10);
+        const date = new Date(sale.transactionDate);
+        const saleDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+          2,
+          "0"
+        )}-${String(date.getDate()).padStart(2, "0")}`;
         return saleDate >= startDate && saleDate <= endDate;
       });
       reportDescription = `${startDate} to ${endDate}`;

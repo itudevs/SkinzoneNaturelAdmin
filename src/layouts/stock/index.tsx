@@ -186,8 +186,11 @@ function Stock() {
   const addStock = () => {
     const amount = Number(restockAmount);
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setMessage({ color: "error", text: "Enter a stock amount greater than zero." });
+    if (!Number.isInteger(amount) || amount < 1) {
+      setMessage({
+        color: "error",
+        text: "Enter a whole-number stock amount of at least one.",
+      });
       return;
     }
 

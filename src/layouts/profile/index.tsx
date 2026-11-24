@@ -16,7 +16,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { api } from "layouts/authentication/apiClient";
 import { LoginUserDto } from "Dtos";
-
+import { getAuthToken } from "layouts/authentication/authService";
 function Profile() {
   const [profile, setProfile] = useState({
     name: "",
@@ -32,7 +32,7 @@ function Profile() {
 
   useEffect(() => {
     const loadProfile = async () => {
-      const token = localStorage.getItem("authToken") || sessionStorage.getItem("authToken");
+      const token = getAuthToken();
 
       if (!token) {
         setMessage({ color: "error", text: "You must sign in to view your profile." });
