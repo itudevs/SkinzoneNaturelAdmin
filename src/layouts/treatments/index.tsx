@@ -1,8 +1,12 @@
 // @ts-nocheck
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Card from "@mui/material/Card";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import FormControl from "@mui/material/FormControl";
 import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
@@ -20,32 +24,52 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { api } from "layouts/authentication/apiClient";
+import { getAuthToken } from "layouts/authentication/authService";
 
-const categories = ["Facial", "Body", "Chemical Peel", "Other"];
+const getErrorMessage = (error, fallback) => (error instanceof Error ? error.message : fallback);
 
-const initialTreatments = [
-  {
-    treatmentId: 1,
-    name: "Deep Cleansing Facial",
-    category: "Facial",
-    discount: 10,
-    retailPrice: 650,
-  },
-  { treatmentId: 2, name: "Body Sculpting", category: "Body", discount: 0, retailPrice: 850 },
-  {
-    treatmentId: 3,
-    name: "Skin Renewal Peel",
-    category: "Chemical Peel",
-    discount: 5,
-    retailPrice: 750,
-  },
-];
+const getTreatmentCatalog = async (token) => {
+  const [categories, treatments] = await Promise.all([
+    api.get("/treatment/categories", token),
+    api.get("/treatment/treatments", token),
+  ]);
+
+  if (!Array.isArray(categories) || !Array.isArray(treatments)) {
+    throw new Error("The treatment categories or treatment list response was not a list.");
+  }
+
+  return { categories, treatments };
+};
+
+const getDetailedTreatments = async (treatments, token) =>
+  Promise.all(
+    treatments.map(async (treatment) => {
+      const details = await api.get(`/treatment/treatment/${treatment.id}`, token);
+
+      if (!details || typeof details !== "object") {
+        throw new Error(`The details response for treatment ${treatment.id} was invalid.`);
+      }
+
+      return { ...details, id: treatment.id };
+    })
+  );
 
 function Treatments() {
-  const [treatments, setTreatments] = useState(initialTreatments);
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [categories, setCategories] = useState([]);
+  const [treatments, setTreatments] = useState([]);
+  const [categoryTreatments, setCategoryTreatments] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedTreatment, setSelectedTreatment] = useState(null);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
+  const [isLoadingCategoryTreatments, setIsLoadingCategoryTreatments] = useState(false);
+  const [isLoadingTreatmentDetails, setIsLoadingTreatmentDetails] = useState(false);
+  const [isSavingTreatment, setIsSavingTreatment] = useState(false);
+  const [isDeletingTreatment, setIsDeletingTreatment] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [editingTreatmentId, setEditingTreatmentId] = useState(null);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
   const [form, setForm] = useState({
     name: "",
     category: "",
@@ -54,21 +78,97 @@ function Treatments() {
   });
   const [message, setMessage] = useState(null);
 
-  const visibleTreatments = treatments.filter(
-    (treatment) =>
-      (selectedCategory === "All" || treatment.category === selectedCategory) &&
-      treatment.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCatalog = async () => {
+      try {
+        const token = await getAuthToken();
+        const catalog = await getTreatmentCatalog(token);
+
+        if (isMounted) {
+          setCategories(catalog.categories);
+          setTreatments(catalog.treatments);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessage({
+            color: "error",
+            text: getErrorMessage(error, "Could not load treatment data."),
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingCatalog(false);
+        }
+      }
+    };
+
+    loadCatalog();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const refreshCatalog = async (token) => {
+    const catalog = await getTreatmentCatalog(token);
+    setCategories(catalog.categories);
+    setTreatments(catalog.treatments);
+    return catalog.treatments;
+  };
 
   const updateForm = (field) => (event) =>
     setForm((current) => ({ ...current, [field]: event.target.value }));
 
-  const resetForm = () => {
-    setEditingTreatmentId(null);
-    setForm({ name: "", category: "", discount: "", retailPrice: "" });
+  const openCategory = async (categoryName) => {
+    setSelectedCategory(categoryName);
+    setSelectedTreatment(null);
+    setCategoryTreatments([]);
+    setSearchTerm("");
+    setIsLoadingCategoryTreatments(true);
+    setMessage(null);
+
+    try {
+      const token = await getAuthToken();
+      const details = await getDetailedTreatments(treatments, token);
+      setCategoryTreatments(details.filter((treatment) => treatment.category === categoryName));
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, `Could not load treatments in ${categoryName}.`),
+      });
+    } finally {
+      setIsLoadingCategoryTreatments(false);
+    }
   };
 
-  const saveTreatment = (event) => {
+  const openTreatment = async (treatment) => {
+    setSelectedTreatment({ id: treatment.id, name: treatment.name });
+    setIsLoadingTreatmentDetails(true);
+    setMessage(null);
+
+    try {
+      const token = await getAuthToken();
+      const details = await api.get(`/treatment/treatment/${treatment.id}`, token);
+
+      if (!details || typeof details !== "object") {
+        throw new Error("The treatment details response was invalid.");
+      }
+
+      setSelectedTreatment({ ...details, id: treatment.id });
+    } catch (error) {
+      setSelectedTreatment(null);
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, `Could not load ${treatment.name}.`),
+      });
+    } finally {
+      setIsLoadingTreatmentDetails(false);
+    }
+  };
+
+  const saveTreatment = async (event) => {
     event.preventDefault();
 
     if (!form.name.trim() || !form.category || form.discount === "" || form.retailPrice === "") {
@@ -78,7 +178,6 @@ function Treatments() {
 
     const discount = Number(form.discount);
     const retailPrice = Number(form.retailPrice);
-
     if (
       !Number.isFinite(discount) ||
       discount < 0 ||
@@ -93,58 +192,127 @@ function Treatments() {
       return;
     }
 
-    if (editingTreatmentId) {
-      setTreatments((current) =>
-        current.map((treatment) =>
-          treatment.treatmentId === editingTreatmentId
-            ? {
-                ...treatment,
-                name: form.name.trim(),
-                category: form.category,
-                discount,
-                retailPrice,
-              }
-            : treatment
+    setIsSavingTreatment(true);
+    setMessage(null);
+
+    try {
+      const token = await getAuthToken();
+      const treatment = {
+        name: form.name.trim(),
+        category: form.category,
+        retailPrice,
+        discount,
+        numberOfPeopleTreated: 0,
+      };
+      const savedTreatment = await api.post("/treatment/add/treatment", treatment, token);
+
+      if (!savedTreatment) {
+        throw new Error("The treatment could not be saved.");
+      }
+
+      const updatedTreatments = await refreshCatalog(token);
+      setSelectedCategory(form.category);
+      setSelectedTreatment(null);
+      setCategoryTreatments(
+        (await getDetailedTreatments(updatedTreatments, token)).filter(
+          (item) => item.category === form.category
         )
       );
-      setMessage({ color: "success", text: "Treatment details updated successfully." });
-    } else {
-      setTreatments((current) => [
-        ...current,
-        {
-          treatmentId: Date.now(),
-          name: form.name.trim(),
-          category: form.category,
-          discount,
-          retailPrice,
-        },
-      ]);
+      setForm({ name: "", category: "", discount: "", retailPrice: "" });
       setMessage({ color: "success", text: "Treatment saved successfully." });
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, "Could not save the treatment."),
+      });
+    } finally {
+      setIsSavingTreatment(false);
     }
-
-    resetForm();
   };
 
-  const editTreatment = (treatment) => {
-    setEditingTreatmentId(treatment.treatmentId);
-    setForm({
-      name: treatment.name,
-      category: treatment.category,
-      discount: treatment.discount,
-      retailPrice: treatment.retailPrice,
-    });
+  const saveCategory = async () => {
+    const categoryName = newCategoryName.trim();
+    if (!categoryName) {
+      setMessage({ color: "error", text: "Enter a category name." });
+      return;
+    }
+
+    if (
+      categories.some(
+        (category) => category.treatmentCategory.toLowerCase() === categoryName.toLowerCase()
+      )
+    ) {
+      setMessage({ color: "error", text: "That treatment category already exists." });
+      return;
+    }
+
+    setIsSavingCategory(true);
     setMessage(null);
+
+    try {
+      const token = await getAuthToken();
+      const categoryAdded = await api.post("/treatment/add/category", categoryName, token);
+
+      if (!categoryAdded) {
+        throw new Error("The treatment category could not be added.");
+      }
+
+      await refreshCatalog(token);
+      setSelectedCategory(null);
+      setSelectedTreatment(null);
+      setCategoryDialogOpen(false);
+      setNewCategoryName("");
+      setMessage({ color: "success", text: `${categoryName} category added successfully.` });
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, `Could not add ${categoryName}.`),
+      });
+    } finally {
+      setIsSavingCategory(false);
+    }
   };
 
-  const removeTreatment = (treatment) => {
-    setTreatments((current) =>
-      current.filter((item) => item.treatmentId !== treatment.treatmentId)
-    );
-    if (editingTreatmentId === treatment.treatmentId) {
-      resetForm();
+  const removeTreatment = async (treatment) => {
+    setIsDeletingTreatment(true);
+    setMessage(null);
+
+    try {
+      const token = await getAuthToken();
+      const deleted = await api.post(
+        `/treatment/treatment/delete/${treatment.id}`,
+        undefined,
+        token
+      );
+
+      if (!deleted) {
+        throw new Error("The treatment could not be deleted.");
+      }
+
+      const updatedTreatments = await refreshCatalog(token);
+      setSelectedTreatment(null);
+      if (selectedCategory) {
+        setCategoryTreatments(
+          (await getDetailedTreatments(updatedTreatments, token)).filter(
+            (item) => item.category === selectedCategory
+          )
+        );
+      }
+      setMessage({ color: "success", text: "Treatment removed successfully." });
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, "Could not remove the treatment."),
+      });
+    } finally {
+      setIsDeletingTreatment(false);
     }
-    setMessage({ color: "success", text: "Treatment removed successfully." });
   };
+
+  const visibleTreatments = categoryTreatments.filter((treatment) =>
+    treatment.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  const isTreatmentDetailsSelected = selectedTreatment !== null;
 
   return (
     <DashboardLayout>
@@ -152,10 +320,11 @@ function Treatments() {
       <MDBox pt={6} pb={3}>
         <MDBox mb={3}>
           <MDTypography variant="h4" fontWeight="medium">
-            Manage Treatments
+            Treatment List
           </MDTypography>
           <MDTypography variant="body2" color="text">
-            Add treatments, assign categories, and maintain treatment information.
+            Browse treatments by category, view treatment totals, and maintain the treatment
+            catalog.
           </MDTypography>
         </MDBox>
 
@@ -171,78 +340,200 @@ function Treatments() {
           <Grid item xs={12} lg={7}>
             <Card>
               <MDBox p={3}>
-                <MDTypography variant="h6" mb={2}>
-                  Treatments
-                </MDTypography>
-                <MDBox mb={2}>
-                  <MDInput
-                    label="Search treatment"
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    fullWidth
-                  />
-                </MDBox>
-                <MDBox mb={3} px={0.5}>
-                  <FormControl fullWidth sx={{ minWidth: 0 }}>
-                    <InputLabel shrink>Filter by category</InputLabel>
-                    <Select
-                      value={selectedCategory}
-                      label="Filter by category"
-                      onChange={(event) => setSelectedCategory(event.target.value)}
-                      sx={{ minHeight: 56 }}
+                <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <MDTypography variant="h6">
+                    {isTreatmentDetailsSelected
+                      ? "Treatment Details"
+                      : selectedCategory
+                      ? `${selectedCategory} Treatments`
+                      : "Treatment Categories"}
+                  </MDTypography>
+                  {selectedCategory || isTreatmentDetailsSelected ? (
+                    <MDButton
+                      variant="text"
+                      color="primary"
+                      onClick={() => {
+                        if (isTreatmentDetailsSelected) {
+                          setSelectedTreatment(null);
+                        } else {
+                          setSelectedCategory(null);
+                          setCategoryTreatments([]);
+                          setSearchTerm("");
+                        }
+                      }}
                     >
-                      <MenuItem value="All">All categories</MenuItem>
-                      {categories.map((category) => (
-                        <MenuItem value={category} key={category}>
-                          {category}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </MDBox>
-                {visibleTreatments.length ? (
-                  visibleTreatments.map((treatment) => (
-                    <MDBox
-                      key={treatment.treatmentId}
-                      display="flex"
-                      justifyContent="space-between"
-                      alignItems="center"
-                      py={1.5}
-                      sx={{ borderBottom: "1px solid", borderColor: "divider" }}
+                      {isTreatmentDetailsSelected ? "Back to treatments" : "All categories"}
+                    </MDButton>
+                  ) : (
+                    <MDButton
+                      variant="text"
+                      color="primary"
+                      onClick={() => setCategoryDialogOpen(true)}
                     >
-                      <MDBox>
-                        <MDTypography variant="button" fontWeight="medium" display="block">
-                          {treatment.name}
+                      Add category
+                    </MDButton>
+                  )}
+                </MDBox>
+
+                {isLoadingCatalog ? (
+                  <MDTypography variant="body2" color="text">
+                    Loading treatment categories...
+                  </MDTypography>
+                ) : isTreatmentDetailsSelected ? (
+                  <MDBox>
+                    <MDTypography variant="h5" fontWeight="medium" mb={1}>
+                      {selectedTreatment.name}
+                    </MDTypography>
+                    {isLoadingTreatmentDetails ? (
+                      <MDTypography variant="body2" color="text">
+                        Loading treatment details...
+                      </MDTypography>
+                    ) : (
+                      <>
+                        <MDTypography variant="body2" color="text" mb={3}>
+                          Category: {selectedTreatment.category}
                         </MDTypography>
-                        <MDTypography variant="caption" color="text">
-                          TreatmentID: {treatment.treatmentId} | Category: {treatment.category}
-                          {" | "}Retail price: R{treatment.retailPrice.toFixed(2)}
-                          {" | "}Discount: {treatment.discount}%
-                        </MDTypography>
-                      </MDBox>
-                      <MDBox display="flex">
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          aria-label={`Edit ${treatment.name}`}
-                          onClick={() => editTreatment(treatment)}
-                        >
-                          <Icon fontSize="small">edit</Icon>
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          aria-label={`Remove ${treatment.name}`}
-                          onClick={() => removeTreatment(treatment)}
-                        >
-                          <Icon fontSize="small">delete</Icon>
-                        </IconButton>
-                      </MDBox>
+                        <Grid container spacing={2} mb={2}>
+                          <Grid item xs={12} sm={4}>
+                            <Card>
+                              <MDBox p={2}>
+                                <MDTypography variant="caption" color="text">
+                                  People treated
+                                </MDTypography>
+                                <MDTypography variant="h5">
+                                  {selectedTreatment.numberOfPeopleTreated ?? "Unavailable"}
+                                </MDTypography>
+                              </MDBox>
+                            </Card>
+                          </Grid>
+                          <Grid item xs={12} sm={4}>
+                            <Card>
+                              <MDBox p={2}>
+                                <MDTypography variant="caption" color="text">
+                                  Retail price
+                                </MDTypography>
+                                <MDTypography variant="h5">
+                                  R{Number(selectedTreatment.retailPrice).toFixed(2)}
+                                </MDTypography>
+                              </MDBox>
+                            </Card>
+                          </Grid>
+                          <Grid item xs={12} sm={4}>
+                            <Card>
+                              <MDBox p={2}>
+                                <MDTypography variant="caption" color="text">
+                                  Total amount (people × retail price)
+                                </MDTypography>
+                                <MDTypography variant="h5">
+                                  {Number.isFinite(Number(selectedTreatment.numberOfPeopleTreated))
+                                    ? `R${(
+                                        Number(selectedTreatment.numberOfPeopleTreated) *
+                                        Number(selectedTreatment.retailPrice)
+                                      ).toFixed(2)}`
+                                    : "Unavailable"}
+                                </MDTypography>
+                              </MDBox>
+                            </Card>
+                          </Grid>
+                        </Grid>
+                        <MDBox display="flex" justifyContent="flex-end">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            aria-label={`Remove ${selectedTreatment.name}`}
+                            disabled={isDeletingTreatment}
+                            onClick={() => removeTreatment(selectedTreatment)}
+                          >
+                            <Icon fontSize="small">delete</Icon>
+                          </IconButton>
+                        </MDBox>
+                      </>
+                    )}
+                  </MDBox>
+                ) : selectedCategory ? (
+                  <MDBox>
+                    <MDBox mb={2}>
+                      <MDInput
+                        label="Search treatment"
+                        value={searchTerm}
+                        onChange={(event) => setSearchTerm(event.target.value)}
+                        fullWidth
+                      />
                     </MDBox>
-                  ))
+                    {isLoadingCategoryTreatments ? (
+                      <MDTypography variant="body2" color="text">
+                        Loading treatments...
+                      </MDTypography>
+                    ) : visibleTreatments.length ? (
+                      visibleTreatments.map((treatment) => (
+                        <MDBox
+                          key={treatment.id}
+                          display="flex"
+                          justifyContent="space-between"
+                          alignItems="center"
+                          py={1}
+                          sx={{ borderBottom: "1px solid", borderColor: "divider" }}
+                        >
+                          <MDButton
+                            variant="text"
+                            color="dark"
+                            onClick={() => openTreatment(treatment)}
+                            sx={{ textAlign: "left", justifyContent: "flex-start", flexGrow: 1 }}
+                          >
+                            <MDBox>
+                              <MDTypography variant="button" fontWeight="medium" display="block">
+                                {treatment.name}
+                              </MDTypography>
+                              <MDTypography variant="caption" color="text">
+                                Retail price: R{Number(treatment.retailPrice).toFixed(2)}
+                              </MDTypography>
+                            </MDBox>
+                          </MDButton>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            aria-label={`Remove ${treatment.name}`}
+                            disabled={isDeletingTreatment}
+                            onClick={() => removeTreatment(treatment)}
+                          >
+                            <Icon fontSize="small">delete</Icon>
+                          </IconButton>
+                        </MDBox>
+                      ))
+                    ) : (
+                      <MDTypography variant="body2" color="text">
+                        No treatments found in this category.
+                      </MDTypography>
+                    )}
+                  </MDBox>
+                ) : categories.length ? (
+                  <Grid container spacing={2}>
+                    {categories.map((category) => (
+                      <Grid item xs={12} sm={6} key={category.treatmentCategory}>
+                        <Card>
+                          <MDBox p={2}>
+                            <MDTypography variant="h6" mb={1}>
+                              {category.treatmentCategory}
+                            </MDTypography>
+                            <MDTypography variant="body2" color="text" mb={2}>
+                              {category.numberOfTreatments} treatment(s)
+                            </MDTypography>
+                            <MDButton
+                              variant="gradient"
+                              color="primary"
+                              fullWidth
+                              onClick={() => openCategory(category.treatmentCategory)}
+                            >
+                              View treatments
+                            </MDButton>
+                          </MDBox>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
                 ) : (
                   <MDTypography variant="body2" color="text">
-                    No treatments found.
+                    No treatment categories found. Add a category to get started.
                   </MDTypography>
                 )}
               </MDBox>
@@ -253,7 +544,7 @@ function Treatments() {
             <Card>
               <MDBox p={3}>
                 <MDTypography variant="h6" mb={2}>
-                  {editingTreatmentId ? "Update Treatment Details" : "Enter Treatment Details"}
+                  Add Treatment
                 </MDTypography>
                 <MDBox component="form" onSubmit={saveTreatment}>
                   <MDBox mb={3}>
@@ -274,8 +565,11 @@ function Treatments() {
                         sx={{ minHeight: 56 }}
                       >
                         {categories.map((category) => (
-                          <MenuItem value={category} key={category}>
-                            {category}
+                          <MenuItem
+                            value={category.treatmentCategory}
+                            key={category.treatmentCategory}
+                          >
+                            {category.treatmentCategory}
                           </MenuItem>
                         ))}
                       </Select>
@@ -301,26 +595,67 @@ function Treatments() {
                       fullWidth
                     />
                   </MDBox>
-                  <MDButton type="submit" variant="gradient" color="primary" fullWidth>
-                    {editingTreatmentId ? "Update Treatment" : "Save Treatment"}
+                  <MDButton
+                    type="submit"
+                    variant="gradient"
+                    color="primary"
+                    fullWidth
+                    disabled={isSavingTreatment || !categories.length}
+                  >
+                    {isSavingTreatment ? "Saving..." : "Save Treatment"}
                   </MDButton>
-                  {editingTreatmentId && (
-                    <MDButton
-                      type="button"
-                      variant="text"
-                      color="dark"
-                      fullWidth
-                      onClick={resetForm}
-                    >
-                      Cancel edit
-                    </MDButton>
-                  )}
                 </MDBox>
               </MDBox>
             </Card>
           </Grid>
         </Grid>
       </MDBox>
+
+      <Dialog
+        open={categoryDialogOpen}
+        onClose={() => {
+          if (!isSavingCategory) {
+            setCategoryDialogOpen(false);
+            setNewCategoryName("");
+          }
+        }}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Add treatment category</DialogTitle>
+        <DialogContent>
+          <MDBox mt={1}>
+            <MDInput
+              label="Category name"
+              value={newCategoryName}
+              onChange={(event) => setNewCategoryName(event.target.value)}
+              fullWidth
+              autoFocus
+            />
+          </MDBox>
+        </DialogContent>
+        <DialogActions>
+          <MDButton
+            variant="text"
+            color="dark"
+            disabled={isSavingCategory}
+            onClick={() => {
+              setCategoryDialogOpen(false);
+              setNewCategoryName("");
+            }}
+          >
+            Cancel
+          </MDButton>
+          <MDButton
+            variant="gradient"
+            color="primary"
+            disabled={isSavingCategory}
+            onClick={saveCategory}
+          >
+            {isSavingCategory ? "Saving..." : "Add category"}
+          </MDButton>
+        </DialogActions>
+      </Dialog>
       <Footer />
     </DashboardLayout>
   );

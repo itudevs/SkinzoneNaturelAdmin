@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Card from "@mui/material/Card";
 import FormControl from "@mui/material/FormControl";
@@ -19,12 +19,11 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { api } from "layouts/authentication/apiClient";
+import { getAuthToken } from "layouts/authentication/authService";
 
-const treatments = [
-  { id: "TREAT-001", name: "Deep Cleansing Facial", price: 650 },
-  { id: "TREAT-002", name: "Body Sculpting", price: 850 },
-  { id: "TREAT-003", name: "Skin Renewal Peel", price: 750 },
-];
+const SALES_STORAGE_KEY = "skinzone-sales";
+const TREATMENT_LIST_ENDPOINT = "/treatment/treatments";
 
 const products = [
   { id: "PROD-001", name: "GENOP Cleanser", price: 280 },
@@ -39,8 +38,10 @@ const initialClients = [
 ];
 
 function Sales() {
+  const [treatments, setTreatments] = useState([]);
   const [clients, setClients] = useState(initialClients);
   const [sales, setSales] = useState([]);
+  const [isSalesLoaded, setIsSalesLoaded] = useState(false);
   const [saleForm, setSaleForm] = useState({
     clientId: "",
     paymentMethod: "",
@@ -58,6 +59,70 @@ function Sales() {
   const [endDate, setEndDate] = useState("");
   const [treatmentSearch, setTreatmentSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadData = async () => {
+      try {
+        const storedSales = localStorage.getItem(SALES_STORAGE_KEY);
+        const savedSales = storedSales ? JSON.parse(storedSales) : [];
+
+        if (!Array.isArray(savedSales)) {
+          throw new Error("Saved sales data is not in the expected format.");
+        }
+
+        if (isMounted) {
+          setSales(savedSales);
+          setIsSalesLoaded(true);
+        }
+
+        const token = await getAuthToken();
+        const treatmentList = await api.get(TREATMENT_LIST_ENDPOINT, token);
+
+        if (!Array.isArray(treatmentList)) {
+          throw new Error("The treatment list response was not a list.");
+        }
+
+        if (isMounted) {
+          setTreatments(
+            treatmentList.map((treatment) => ({
+              id: treatment.id,
+              name: treatment.name,
+              price: treatment.retailPrice,
+            }))
+          );
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessage({
+            color: "error",
+            text: error instanceof Error ? error.message : "Could not load sales data.",
+          });
+        }
+      }
+    };
+
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSalesLoaded) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(sales));
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not save sales data.",
+      });
+    }
+  }, [isSalesLoaded, sales]);
 
   const selectedTreatments = treatments.filter((item) => saleForm.treatmentIds.includes(item.id));
   const selectedProducts = products.filter((item) => saleForm.productIds.includes(item.id));
@@ -332,7 +397,7 @@ function Sales() {
                           )
                           .map((item) => (
                             <MenuItem value={item.id} key={item.id}>
-                              {item.name}
+                              {item.name} — R{Number(item.price).toFixed(2)}
                             </MenuItem>
                           ))}
                       </Select>

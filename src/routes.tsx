@@ -80,7 +80,7 @@ const routes = [
   },
   {
     type: "collapse",
-    name: "Treatments",
+    name: "Treatment List",
     key: "treatments",
     icon: <Icon fontSize="small">spa</Icon>,
     route: "/treatments",

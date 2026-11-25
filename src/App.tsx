@@ -18,11 +18,13 @@ import { useState, useEffect, useMemo } from "react";
 
 // react-router components
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
 
 // @mui material components
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import Icon from "@mui/material/Icon";
+import CircularProgress from "@mui/material/CircularProgress";
 
 // Material Dashboard 2 React components
 import MDBox from "components/MDBox";
@@ -47,6 +49,7 @@ import createCache from "@emotion/cache";
 // Material Dashboard 2 React routes
 import routes from "routes";
 import SignUpConfirmation from "layouts/authentication/sign-up-confirmation";
+import { auth } from "FirebaseLogic/firebase";
 
 // Material Dashboard 2 React contexts
 import { useMaterialUIController, setMiniSidenav, setOpenConfigurator } from "context";
@@ -70,6 +73,18 @@ export default function App() {
   const [onMouseEnter, setOnMouseEnter] = useState(false);
   const [rtlCache, setRtlCache] = useState(null);
   const { pathname } = useLocation();
+  const [authenticatedUser, setAuthenticatedUser] = useState(auth.currentUser);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const isAuthenticationRoute = pathname.startsWith("/authentication/");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthenticatedUser(user);
+      setIsAuthLoading(false);
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Cache for the rtl
   useMemo(() => {
@@ -111,6 +126,18 @@ export default function App() {
     document.scrollingElement.scrollTop = 0;
   }, [pathname]);
 
+  const getProtectedElement = (element) => {
+    if (isAuthLoading) {
+      return (
+        <MDBox minHeight="100vh" display="flex" justifyContent="center" alignItems="center">
+          <CircularProgress color="primary" />
+        </MDBox>
+      );
+    }
+
+    return authenticatedUser ? element : <Navigate to="/authentication/sign-in" replace />;
+  };
+
   const getRoutes = (allRoutes) =>
     allRoutes.map((route) => {
       if (route.collapse) {
@@ -118,7 +145,12 @@ export default function App() {
       }
 
       if (route.route) {
-        return <Route exact path={route.route} element={route.component} key={route.key} />;
+        const isPublicRoute = ["/authentication/sign-in", "/authentication/sign-up"].includes(
+          route.route
+        );
+        const element = isPublicRoute ? route.component : getProtectedElement(route.component);
+
+        return <Route exact path={route.route} element={element} key={route.key} />;
       }
 
       return null;
@@ -152,7 +184,7 @@ export default function App() {
     <CacheProvider value={rtlCache}>
       <ThemeProvider theme={darkMode ? themeDarkRTL : themeRTL}>
         <CssBaseline />
-        {layout === "dashboard" && (
+        {layout === "dashboard" && authenticatedUser && !isAuthenticationRoute && (
           <>
             <Sidenav
               color={sidenavColor}
@@ -170,7 +202,10 @@ export default function App() {
         <Routes>
           {getRoutes(routes)}
           <Route path="/" element={<Navigate to="/authentication/sign-in" replace />} />
-          <Route path="/authentication/sign-up-confirmation" element={<SignUpConfirmation />} />
+          <Route
+            path="/authentication/sign-up-confirmation"
+            element={getProtectedElement(<SignUpConfirmation />)}
+          />
           <Route path="*" element={<Navigate to="/dashboard" />} />
         </Routes>
       </ThemeProvider>
@@ -178,7 +213,7 @@ export default function App() {
   ) : (
     <ThemeProvider theme={darkMode ? themeDark : theme}>
       <CssBaseline />
-      {layout === "dashboard" && (
+      {layout === "dashboard" && authenticatedUser && !isAuthenticationRoute && (
         <>
           <Sidenav
             color={sidenavColor}
@@ -196,7 +231,10 @@ export default function App() {
       <Routes>
         {getRoutes(routes)}
         <Route path="/" element={<Navigate to="/authentication/sign-in" replace />} />
-        <Route path="/authentication/sign-up-confirmation" element={<SignUpConfirmation />} />
+        <Route
+          path="/authentication/sign-up-confirmation"
+          element={getProtectedElement(<SignUpConfirmation />)}
+        />
         <Route path="*" element={<Navigate to="/dashboard" />} />
       </Routes>
     </ThemeProvider>
