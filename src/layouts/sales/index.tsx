@@ -21,6 +21,13 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { api } from "layouts/authentication/apiClient";
 import { getAuthToken } from "layouts/authentication/authService";
+import ClientConsultationForm from "layouts/clients/ClientConsultationForm";
+import {
+  initialClients,
+  loadClients,
+  saveClientConsultation,
+  saveClients,
+} from "layouts/clients/clientStore";
 
 const SALES_STORAGE_KEY = "skinzone-sales";
 const TREATMENT_LIST_ENDPOINT = "/treatment/treatments";
@@ -32,14 +39,10 @@ const products = [
   { id: "PROD-004", name: "Evolution Serum", price: 520 },
 ];
 
-const initialClients = [
-  { id: 1, name: "John Michael", contactNumber: "071 123 4567" },
-  { id: 2, name: "Alexa Liras", contactNumber: "072 987 6543" },
-];
-
 function Sales() {
   const [treatments, setTreatments] = useState([]);
   const [clients, setClients] = useState(initialClients);
+  const [consultationClient, setConsultationClient] = useState(null);
   const [sales, setSales] = useState([]);
   const [isSalesLoaded, setIsSalesLoaded] = useState(false);
   const [saleForm, setSaleForm] = useState({
@@ -50,7 +53,12 @@ function Sales() {
     productIds: [],
     quantity: 1,
   });
-  const [newClient, setNewClient] = useState({ name: "", contactNumber: "" });
+  const [newClient, setNewClient] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+  });
   const [showAddClient, setShowAddClient] = useState(false);
   const [message, setMessage] = useState(null);
   const [report, setReport] = useState(null);
@@ -59,6 +67,17 @@ function Sales() {
   const [endDate, setEndDate] = useState("");
   const [treatmentSearch, setTreatmentSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
+
+  useEffect(() => {
+    try {
+      setClients(loadClients());
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not load client data.",
+      });
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,20 +154,54 @@ function Sales() {
   const updateSaleForm = (field) => (event) =>
     setSaleForm((current) => ({ ...current, [field]: event.target.value }));
 
+  const selectedClient = clients.find((client) => client.id === Number(saleForm.clientId));
+
+  const saveConsultation = (answers) => {
+    try {
+      const updatedClients = saveClientConsultation(clients, consultationClient.id, answers);
+      const updatedClient = updatedClients.find((client) => client.id === consultationClient.id);
+      setClients(updatedClients);
+      setConsultationClient(updatedClient);
+      setMessage({ color: "success", text: "Consultation form saved successfully." });
+      return true;
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not save the consultation form.",
+      });
+      return false;
+    }
+  };
+
   const addClient = () => {
-    if (!newClient.name.trim() || !newClient.contactNumber.trim()) {
-      setMessage({ color: "error", text: "Enter the new client's name and contact number." });
+    if (!newClient.name.trim() || !newClient.phone.trim()) {
+      setMessage({ color: "error", text: "Enter the new client's name and phone number." });
       return;
     }
 
     const client = {
       id: Date.now(),
       name: newClient.name.trim(),
-      contactNumber: newClient.contactNumber.trim(),
+      phone: newClient.phone.trim(),
+      email: newClient.email.trim(),
+      address: newClient.address.trim(),
+      consultationForms: [],
+      transactions: [],
     };
-    setClients((current) => [...current, client]);
+    const updatedClients = [...clients, client];
+    try {
+      saveClients(updatedClients);
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not save client data.",
+      });
+      return;
+    }
+
+    setClients(updatedClients);
     setSaleForm((current) => ({ ...current, clientId: client.id }));
-    setNewClient({ name: "", contactNumber: "" });
+    setNewClient({ name: "", phone: "", email: "", address: "" });
     setShowAddClient(false);
     setMessage({ color: "success", text: "Client added successfully." });
   };
@@ -289,6 +342,21 @@ function Sales() {
                       </Select>
                     </FormControl>
                   </MDBox>
+                  {selectedClient && (
+                    <MDBox mb={1}>
+                      <MDButton
+                        type="button"
+                        variant="text"
+                        color="primary"
+                        onClick={() => {
+                          setMessage(null);
+                          setConsultationClient(selectedClient);
+                        }}
+                      >
+                        New consultation form
+                      </MDButton>
+                    </MDBox>
+                  )}
                   <MDButton
                     type="button"
                     variant="text"
@@ -309,14 +377,32 @@ function Sales() {
                           fullWidth
                         />
                       </MDBox>
+                      <MDBox mb={2}>
+                        <MDInput
+                          label="Phone number"
+                          value={newClient.phone}
+                          onChange={(event) =>
+                            setNewClient((current) => ({ ...current, phone: event.target.value }))
+                          }
+                          fullWidth
+                        />
+                      </MDBox>
+                      <MDBox mb={2}>
+                        <MDInput
+                          type="email"
+                          label="Email"
+                          value={newClient.email}
+                          onChange={(event) =>
+                            setNewClient((current) => ({ ...current, email: event.target.value }))
+                          }
+                          fullWidth
+                        />
+                      </MDBox>
                       <MDInput
-                        label="Contact number"
-                        value={newClient.contactNumber}
+                        label="Address"
+                        value={newClient.address}
                         onChange={(event) =>
-                          setNewClient((current) => ({
-                            ...current,
-                            contactNumber: event.target.value,
-                          }))
+                          setNewClient((current) => ({ ...current, address: event.target.value }))
                         }
                         fullWidth
                       />
@@ -550,6 +636,13 @@ function Sales() {
           </Grid>
         </Grid>
       </MDBox>
+      {consultationClient && (
+        <ClientConsultationForm
+          client={consultationClient}
+          onClose={() => setConsultationClient(null)}
+          onSave={saveConsultation}
+        />
+      )}
       <Footer />
     </DashboardLayout>
   );

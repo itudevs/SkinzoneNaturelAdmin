@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Card from "@mui/material/Card";
 import Dialog from "@mui/material/Dialog";
@@ -8,6 +8,9 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Grid from "@mui/material/Grid";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import MDAlert from "components/MDAlert";
 import MDBox from "components/MDBox";
 import MDButton from "components/MDButton";
 import MDInput from "components/MDInput";
@@ -16,56 +19,36 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import ClientConsultationDetails from "layouts/clients/ClientConsultationDetails";
+import ClientConsultationPdfPreview from "layouts/clients/ClientConsultationPdfPreview";
+import { initialClients, loadClients, saveClients } from "layouts/clients/clientStore";
+import { createConsultationFormsPdf, createConsultationPdf } from "layouts/clients/consultationPdf";
 
-const initialClients = [
-  {
-    id: 1,
-    name: "John Michael",
-    email: "john@example.com",
-    phone: "071 123 4567",
-    transactions: [
-      {
-        date: "2026-11-18",
-        time: "09:30",
-        paymentMethod: "Card",
-        visitType: "Consultation",
-        total: "R450.00",
-        saleLines: [{ name: "Skin consultation", amount: "R450.00" }],
-      },
-      {
-        date: "2026-11-02",
-        time: "14:15",
-        paymentMethod: "Cash",
-        visitType: "Treatment",
-        total: "R850.00",
-        saleLines: [{ name: "Naturel skincare set", amount: "R850.00" }],
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: "Alexa Liras",
-    email: "alexa@example.com",
-    phone: "072 987 6543",
-    transactions: [
-      {
-        date: "2026-11-12",
-        time: "11:00",
-        paymentMethod: "Card",
-        visitType: "Treatment",
-        total: "R600.00",
-        saleLines: [{ name: "Facial treatment", amount: "R600.00" }],
-      },
-    ],
-  },
-  {
-    id: 3,
-    name: "Laurent Perrier",
-    email: "laurent@example.com",
-    phone: "083 555 0198",
-    transactions: [],
-  },
-];
+const downloadFile = (fileName, blob) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const getConsultationPdfFileName = (client, form, suffix = "") => {
+  const clientName =
+    client.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "client";
+  const safeSuffix = suffix.replace(/[^a-z0-9-]/gi, "");
+  const formDate = String(form.consultationDate || form.createdAt || "")
+    .replace(/[^0-9-]/g, "")
+    .slice(0, 10);
+  return `${clientName}-consultations${safeSuffix}-${formDate || "undated"}.pdf`;
+};
+
+const formatSavedAt = (value) => (value ? new Date(value).toLocaleString() : "date unknown");
 
 const formatTransactionDate = (date) =>
   new Intl.DateTimeFormat("en-ZA", {
@@ -77,30 +60,166 @@ const formatTransactionDate = (date) =>
 function Clients() {
   const [clients, setClients] = useState(initialClients);
   const [selectedClient, setSelectedClient] = useState(null);
+  const [selectedConsultation, setSelectedConsultation] = useState(null);
+  const [pdfPreview, setPdfPreview] = useState(null);
+  const [showAddClient, setShowAddClient] = useState(false);
+  const [newClient, setNewClient] = useState({ name: "", email: "", phone: "", address: "" });
+  const [message, setMessage] = useState(null);
   const [modalView, setModalView] = useState("details");
   const [editedClient, setEditedClient] = useState(null);
   const [transactionDateFilter, setTransactionDateFilter] = useState("");
 
-  const openClientModal = (client) => {
+  useEffect(() => {
+    try {
+      setClients(loadClients());
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not load client data.",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!pdfPreview) {
+      return undefined;
+    }
+
+    return () => URL.revokeObjectURL(pdfPreview.url);
+  }, [pdfPreview]);
+
+  const openClientModal = (client, view = "details") => {
+    setMessage(null);
     setSelectedClient(client);
     setEditedClient({ ...client });
-    setModalView("details");
+    setSelectedConsultation(null);
+    setModalView(view);
     setTransactionDateFilter("");
   };
 
   const closeClientModal = () => {
     setSelectedClient(null);
     setEditedClient(null);
+    setSelectedConsultation(null);
     setTransactionDateFilter("");
   };
 
   const saveClientDetails = () => {
-    setClients((currentClients) =>
-      currentClients.map((client) => (client.id === editedClient.id ? editedClient : client))
+    const updatedClients = clients.map((client) =>
+      client.id === editedClient.id ? editedClient : client
     );
+    try {
+      saveClients(updatedClients);
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not save client details.",
+      });
+      return;
+    }
+    setClients(updatedClients);
     setSelectedClient(editedClient);
     setModalView("details");
   };
+
+  const addClient = () => {
+    if (!newClient.name.trim()) {
+      setMessage({ color: "error", text: "Enter the new client's name." });
+      return;
+    }
+
+    const client = {
+      id: Date.now(),
+      name: newClient.name.trim(),
+      email: newClient.email.trim(),
+      phone: newClient.phone.trim(),
+      address: newClient.address.trim(),
+      consultationForms: [],
+      transactions: [],
+    };
+    const updatedClients = [...clients, client];
+
+    try {
+      saveClients(updatedClients);
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not add the client.",
+      });
+      return;
+    }
+
+    setClients(updatedClients);
+    setNewClient({ name: "", email: "", phone: "", address: "" });
+    setShowAddClient(false);
+    setSelectedClient(client);
+    setEditedClient(client);
+    setModalView("details");
+    setMessage({ color: "success", text: "Client added successfully." });
+  };
+
+  const downloadConsultationPdf = async (client, form) => {
+    try {
+      const pdf = await createConsultationPdf(client, form);
+      downloadFile(
+        getConsultationPdfFileName(client, form, `-${form.id}`),
+        new Blob([pdf], { type: "application/pdf" })
+      );
+    } catch (error) {
+      setPdfPreview(null);
+      setSelectedConsultation(null);
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not download the consultation PDF.",
+      });
+    }
+  };
+
+  const openConsultationPdfPreview = async (client, form) => {
+    try {
+      const pdf = await createConsultationPdf(client, form);
+      const url = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+      setPdfPreview({
+        url,
+        fileName: getConsultationPdfFileName(client, form),
+        client,
+        form,
+      });
+    } catch (error) {
+      setSelectedConsultation(null);
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not preview the consultation PDF.",
+      });
+    }
+  };
+
+  const exportAllConsultations = async () => {
+    try {
+      const forms = selectedClient?.consultationForms || [];
+      if (forms.length === 0) {
+        throw new Error("This client has no consultation forms to export.");
+      }
+
+      const pdf = await createConsultationFormsPdf(selectedClient, forms);
+      const fileDate = new Date().toISOString().slice(0, 10);
+      downloadFile(
+        getConsultationPdfFileName(selectedClient, { consultationDate: fileDate }),
+        new Blob([pdf], { type: "application/pdf" })
+      );
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not export consultation forms.",
+      });
+    }
+  };
+
+  const selectedConsultations = [...(selectedClient?.consultationForms || [])].sort(
+    (first, second) =>
+      new Date(second.createdAt || second.consultationDate).getTime() -
+      new Date(first.createdAt || first.consultationDate).getTime()
+  );
 
   return (
     <DashboardLayout>
@@ -113,6 +232,25 @@ function Clients() {
           <MDTypography variant="body2" color="text">
             Select a client to update their details or view their transactions.
           </MDTypography>
+        </MDBox>
+        {message && !showAddClient && !selectedClient && (
+          <MDBox mb={3}>
+            <MDAlert color={message.color} dismissible onClose={() => setMessage(null)}>
+              {message.text}
+            </MDAlert>
+          </MDBox>
+        )}
+        <MDBox mb={3}>
+          <MDButton
+            variant="gradient"
+            color="primary"
+            onClick={() => {
+              setNewClient({ name: "", email: "", phone: "", address: "" });
+              setShowAddClient(true);
+            }}
+          >
+            Add client
+          </MDButton>
         </MDBox>
         <Grid container spacing={3}>
           {clients.map((client) => (
@@ -128,14 +266,29 @@ function Clients() {
                   <MDTypography variant="body2" color="text" mb={3}>
                     {client.phone}
                   </MDTypography>
-                  <MDButton
-                    variant="gradient"
-                    color="primary"
-                    fullWidth
-                    onClick={() => openClientModal(client)}
-                  >
-                    View
-                  </MDButton>
+                  {client.address && (
+                    <MDTypography variant="body2" color="text" mb={2}>
+                      {client.address}
+                    </MDTypography>
+                  )}
+                  <MDBox display="flex" flexDirection="column" gap={1}>
+                    <MDButton
+                      variant="gradient"
+                      color="primary"
+                      fullWidth
+                      onClick={() => openClientModal(client)}
+                    >
+                      View
+                    </MDButton>
+                    <MDButton
+                      variant="outlined"
+                      color="primary"
+                      fullWidth
+                      onClick={() => openClientModal(client, "consultations")}
+                    >
+                      View consultation forms
+                    </MDButton>
+                  </MDBox>
                 </MDBox>
               </Card>
             </Grid>
@@ -144,13 +297,27 @@ function Clients() {
       </MDBox>
       <Footer />
 
-      <Dialog open={Boolean(selectedClient)} onClose={closeClientModal} fullWidth maxWidth="sm">
-        <DialogTitle>
-          {modalView === "transactions"
-            ? `${selectedClient?.name}'s transactions`
-            : `${selectedClient?.name} details`}
-        </DialogTitle>
+      <Dialog open={Boolean(selectedClient)} onClose={closeClientModal} fullWidth maxWidth="md">
+        <DialogTitle>{selectedClient?.name}</DialogTitle>
         <DialogContent sx={{ px: 3, pt: 2, pb: 2 }}>
+          {message && selectedClient && (
+            <MDBox mb={2}>
+              <MDAlert color={message.color} dismissible onClose={() => setMessage(null)}>
+                {message.text}
+              </MDAlert>
+            </MDBox>
+          )}
+          <Tabs
+            value={modalView}
+            onChange={(event, nextView) => setModalView(nextView)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ mb: 2 }}
+          >
+            <Tab label="Details" value="details" />
+            <Tab label="Transactions" value="transactions" />
+            <Tab label="Consultation forms" value="consultations" />
+          </Tabs>
           {modalView === "transactions" ? (
             <MDBox>
               <MDBox mb={2} mt={1} px={1}>
@@ -229,6 +396,71 @@ function Clients() {
                 </MDTypography>
               )}
             </MDBox>
+          ) : modalView === "consultations" ? (
+            <MDBox>
+              <MDBox
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+                flexWrap="wrap"
+                gap={1}
+                mb={2}
+              >
+                <MDTypography variant="body2" color="text">
+                  {selectedConsultations.length} saved form
+                  {selectedConsultations.length === 1 ? "" : "s"}
+                </MDTypography>
+                <MDButton
+                  variant="gradient"
+                  color="primary"
+                  disabled={!selectedConsultations.length}
+                  onClick={exportAllConsultations}
+                >
+                  Export all forms
+                </MDButton>
+              </MDBox>
+              {selectedConsultations.length ? (
+                selectedConsultations.map((form) => (
+                  <Card key={form.id} sx={{ mb: 2, boxShadow: "none" }}>
+                    <MDBox
+                      p={2}
+                      display="flex"
+                      justifyContent="space-between"
+                      alignItems="center"
+                      flexWrap="wrap"
+                      gap={2}
+                      sx={{
+                        border: "1px solid",
+                        borderColor: "divider",
+                        borderRadius: "0.75rem",
+                      }}
+                    >
+                      <MDBox>
+                        <MDTypography variant="button" display="block">
+                          Consultation on {form.consultationDate || "date not recorded"}
+                        </MDTypography>
+                        <MDTypography variant="caption" color="text">
+                          Saved {formatSavedAt(form.createdAt)}
+                        </MDTypography>
+                      </MDBox>
+                      <MDBox display="flex" gap={1} flexWrap="wrap">
+                        <MDButton
+                          variant="text"
+                          color="primary"
+                          onClick={() => setSelectedConsultation(form)}
+                        >
+                          View form
+                        </MDButton>
+                      </MDBox>
+                    </MDBox>
+                  </Card>
+                ))
+              ) : (
+                <MDTypography variant="body2" color="text">
+                  No consultation forms have been saved for this client yet. Create one from Sales.
+                </MDTypography>
+              )}
+            </MDBox>
           ) : (
             <MDBox pt={1}>
               <MDBox mb={2}>
@@ -260,6 +492,16 @@ function Clients() {
                 }
                 fullWidth
               />
+              <MDBox mt={2}>
+                <MDInput
+                  label="Address"
+                  value={editedClient?.address || ""}
+                  onChange={(event) =>
+                    setEditedClient({ ...editedClient, address: event.target.value })
+                  }
+                  fullWidth
+                />
+              </MDBox>
             </MDBox>
           )}
         </DialogContent>
@@ -267,22 +509,91 @@ function Clients() {
           <MDButton variant="text" color="dark" onClick={closeClientModal}>
             close
           </MDButton>
-          {modalView === "transactions" ? (
-            <MDButton variant="gradient" color="primary" onClick={() => setModalView("details")}>
-              update details
+          {modalView === "details" && (
+            <MDButton variant="gradient" color="primary" onClick={saveClientDetails}>
+              save details
             </MDButton>
-          ) : (
-            <>
-              <MDButton variant="text" color="primary" onClick={() => setModalView("transactions")}>
-                view client transactions
-              </MDButton>
-              <MDButton variant="gradient" color="primary" onClick={saveClientDetails}>
-                save details
-              </MDButton>
-            </>
           )}
         </DialogActions>
       </Dialog>
+
+      <Dialog open={showAddClient} onClose={() => setShowAddClient(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Add client</DialogTitle>
+        <DialogContent sx={{ px: 3, pt: 2, pb: 2 }}>
+          {message && showAddClient && (
+            <MDBox mb={2}>
+              <MDAlert color={message.color} dismissible onClose={() => setMessage(null)}>
+                {message.text}
+              </MDAlert>
+            </MDBox>
+          )}
+          <MDBox pt={1}>
+            <MDBox mb={2}>
+              <MDInput
+                label="Name"
+                value={newClient.name}
+                onChange={(event) =>
+                  setNewClient((current) => ({ ...current, name: event.target.value }))
+                }
+                fullWidth
+              />
+            </MDBox>
+            <MDBox mb={2}>
+              <MDInput
+                type="email"
+                label="Email"
+                value={newClient.email}
+                onChange={(event) =>
+                  setNewClient((current) => ({ ...current, email: event.target.value }))
+                }
+                fullWidth
+              />
+            </MDBox>
+            <MDBox mb={2}>
+              <MDInput
+                label="Phone"
+                value={newClient.phone}
+                onChange={(event) =>
+                  setNewClient((current) => ({ ...current, phone: event.target.value }))
+                }
+                fullWidth
+              />
+            </MDBox>
+            <MDInput
+              label="Address"
+              value={newClient.address}
+              onChange={(event) =>
+                setNewClient((current) => ({ ...current, address: event.target.value }))
+              }
+              fullWidth
+            />
+          </MDBox>
+        </DialogContent>
+        <DialogActions>
+          <MDButton variant="text" color="dark" onClick={() => setShowAddClient(false)}>
+            Cancel
+          </MDButton>
+          <MDButton variant="gradient" color="primary" onClick={addClient}>
+            Save client
+          </MDButton>
+        </DialogActions>
+      </Dialog>
+      {selectedConsultation && (
+        <ClientConsultationDetails
+          form={selectedConsultation}
+          onClose={() => setSelectedConsultation(null)}
+          onPreviewPdf={() => openConsultationPdfPreview(selectedClient, selectedConsultation)}
+          onDownloadPdf={() => downloadConsultationPdf(selectedClient, selectedConsultation)}
+        />
+      )}
+      {pdfPreview && (
+        <ClientConsultationPdfPreview
+          pdfUrl={pdfPreview.url}
+          fileName={pdfPreview.fileName}
+          onClose={() => setPdfPreview(null)}
+          onDownload={() => downloadConsultationPdf(pdfPreview.client, pdfPreview.form)}
+        />
+      )}
     </DashboardLayout>
   );
 }
