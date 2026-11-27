@@ -3,6 +3,12 @@ import clientConsultationTemplate from "assets/Docs/CLIENT CONSULTATION FORM.pdf
 
 const pdfText = (value) =>
   String(value ?? "")
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2012-\u2015\u2212]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/[\u2022\u00B7]/g, "-")
+    .replace(/\u00A0/g, " ")
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\x20-\x7E]/g, "?");
@@ -26,6 +32,14 @@ const drawFittedText = (page, font, value, x, y, maxWidth, size = 8) => {
     fittedText = `${fittedText.slice(0, -3)}...`;
   }
 
+  const textWidth = font.widthOfTextAtSize(fittedText, fontSize);
+  page.drawRectangle({
+    x: x - 1,
+    y: y - 2,
+    width: Math.min(textWidth + 2, maxWidth),
+    height: fontSize + 4,
+    color: rgb(1, 1, 1),
+  });
   page.drawText(fittedText, {
     x,
     y,
@@ -86,7 +100,7 @@ export const createConsultationPdf = async (client, form) => {
   drawValue(personalAndSkinPage, client.email, 306, 566, 238);
   drawValue(personalAndSkinPage, client.address, 110, 540, 430);
   drawValue(personalAndSkinPage, form.referredBy, 124, 513, 416);
-  drawValue(personalAndSkinPage, form.treatmentGoal, 245, 487, 290);
+  drawValue(personalAndSkinPage, form.treatmentGoal, 285, 487, 250);
 
   drawValue(personalAndSkinPage, form.hadFacial, 280, 434, 210);
   drawValue(personalAndSkinPage, form.lastFacial, 280, 416, 210);
@@ -99,21 +113,21 @@ export const createConsultationPdf = async (client, form) => {
   drawValue(personalAndSkinPage, form.acneMedicineDetails, 315, 288, 180);
 
   [
-    ["Face wash", form.products?.faceWash, 251],
-    ["Toner", form.products?.toner, 233],
-    ["Exfoliant", form.products?.exfoliant, 215],
-    ["Serum", form.products?.serum, 196],
-    ["Moisturizer", form.products?.moisturizer, 178],
-    ["Sunscreen", form.products?.sunscreen, 160],
-    ["Other", form.products?.other, 145],
-  ].forEach(([label, value, y]) => {
+    [form.products?.faceWash, 215, 251, 110],
+    [form.products?.toner, 370, 251, 135],
+    [form.products?.moisturizer, 205, 233, 120],
+    [form.products?.sunscreen, 365, 233, 140],
+    [form.products?.exfoliant, 215, 215, 105],
+    [form.products?.serum, 165, 196, 145],
+    [form.products?.other, 160, 178, 345],
+  ].forEach(([value, x, y, width]) => {
     if (value) {
-      drawValue(personalAndSkinPage, `${label}: ${value}`, 130, y, 365, 7);
+      drawValue(personalAndSkinPage, value, x, y, width, 7);
     }
   });
 
-  drawValue(lifestylePage, form.lifestyle?.waterIntake, 176, 582, 140);
-  drawValue(lifestylePage, form.lifestyle?.mealsPerDay, 145, 559, 170);
+  drawValue(lifestylePage, form.lifestyle?.waterIntake, 335, 582, 220);
+  drawValue(lifestylePage, form.lifestyle?.mealsPerDay, 335, 559, 220);
   drawValue(lifestylePage, form.lifestyle?.fruitsAndVegetables, 382, 536, 95);
   drawValue(lifestylePage, form.lifestyle?.dairy, 382, 513, 95);
   drawValue(lifestylePage, form.lifestyle?.digestiveIssues, 382, 490, 95);
@@ -130,7 +144,7 @@ export const createConsultationPdf = async (client, form) => {
     });
   }
   drawValue(lifestylePage, form.lifestyle?.notes, 374, 385, 165, 7);
-  drawWrappedText(lifestylePage, font, form.lifestyle?.recommendations, 78, 296, 455, 10, 5);
+  drawWrappedText(lifestylePage, font, form.lifestyle?.recommendations, 335, 296, 220, 10, 5);
 
   return pdf.save();
 };

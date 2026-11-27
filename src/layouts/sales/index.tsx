@@ -21,13 +21,9 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { api } from "layouts/authentication/apiClient";
 import { getAuthToken } from "layouts/authentication/authService";
+import { createClient, getClientDisplayName, getClients } from "layouts/clients/clientApi";
 import ClientConsultationForm from "layouts/clients/ClientConsultationForm";
-import {
-  initialClients,
-  loadClients,
-  saveClientConsultation,
-  saveClients,
-} from "layouts/clients/clientStore";
+import { saveClientConsultation } from "layouts/clients/clientStore";
 
 const SALES_STORAGE_KEY = "skinzone-sales";
 const TREATMENT_LIST_ENDPOINT = "/treatment/treatments";
@@ -41,7 +37,8 @@ const products = [
 
 function Sales() {
   const [treatments, setTreatments] = useState([]);
-  const [clients, setClients] = useState(initialClients);
+  const [clients, setClients] = useState([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [consultationClient, setConsultationClient] = useState(null);
   const [sales, setSales] = useState([]);
   const [isSalesLoaded, setIsSalesLoaded] = useState(false);
@@ -55,6 +52,7 @@ function Sales() {
   });
   const [newClient, setNewClient] = useState({
     name: "",
+    surname: "",
     phone: "",
     email: "",
     address: "",
@@ -69,14 +67,33 @@ function Sales() {
   const [productSearch, setProductSearch] = useState("");
 
   useEffect(() => {
-    try {
-      setClients(loadClients());
-    } catch (error) {
-      setMessage({
-        color: "error",
-        text: error instanceof Error ? error.message : "Could not load client data.",
-      });
-    }
+    let isMounted = true;
+
+    const loadClientList = async () => {
+      try {
+        const clientList = await getClients();
+        if (isMounted) {
+          setClients(clientList);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessage({
+            color: "error",
+            text: error instanceof Error ? error.message : "Could not load clients.",
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingClients(false);
+        }
+      }
+    };
+
+    loadClientList();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -173,37 +190,61 @@ function Sales() {
     }
   };
 
-  const addClient = () => {
-    if (!newClient.name.trim() || !newClient.phone.trim()) {
-      setMessage({ color: "error", text: "Enter the new client's name and phone number." });
-      return;
-    }
-
-    const client = {
-      id: Date.now(),
-      name: newClient.name.trim(),
-      phone: newClient.phone.trim(),
-      email: newClient.email.trim(),
-      address: newClient.address.trim(),
-      consultationForms: [],
-      transactions: [],
-    };
-    const updatedClients = [...clients, client];
-    try {
-      saveClients(updatedClients);
-    } catch (error) {
+  const addClient = async () => {
+    if (!newClient.name.trim() || !newClient.surname.trim() || !newClient.phone.trim()) {
       setMessage({
         color: "error",
-        text: error instanceof Error ? error.message : "Could not save client data.",
+        text: "Enter the new client's name, surname, and phone number.",
       });
       return;
     }
 
-    setClients(updatedClients);
-    setSaleForm((current) => ({ ...current, clientId: client.id }));
-    setNewClient({ name: "", phone: "", email: "", address: "" });
+    const clientDto = {
+      name: newClient.name.trim(),
+      surname: newClient.surname.trim(),
+      phone: newClient.phone.trim(),
+      email: newClient.email.trim(),
+      address: newClient.address.trim(),
+    };
+
+    try {
+      await createClient(clientDto);
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not add the client.",
+      });
+      return;
+    }
+
+    setNewClient({ name: "", surname: "", phone: "", email: "", address: "" });
     setShowAddClient(false);
-    setMessage({ color: "success", text: "Client added successfully." });
+    try {
+      const refreshedClients = await getClients();
+      setClients(refreshedClients);
+      const createdClient = refreshedClients.find(
+        (client) =>
+          client.name.toLowerCase() === clientDto.name.toLowerCase() &&
+          client.surname.toLowerCase() === clientDto.surname.toLowerCase() &&
+          client.phone === clientDto.phone
+      );
+      if (createdClient) {
+        setSaleForm((current) => ({ ...current, clientId: createdClient.id }));
+      }
+      setMessage({
+        color: createdClient ? "success" : "warning",
+        text: createdClient
+          ? "Client added and selected."
+          : "Client added, but could not find it in the refreshed list.",
+      });
+    } catch (error) {
+      setMessage({
+        color: "warning",
+        text: `Client added, but the client list could not be refreshed: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+      });
+    }
   };
 
   const saveSale = (event) => {
@@ -334,9 +375,13 @@ function Sales() {
                         onChange={updateSaleForm("clientId")}
                         sx={{ minHeight: 56 }}
                       >
+                        {isLoadingClients && <MenuItem disabled>Loading clients...</MenuItem>}
+                        {!isLoadingClients && clients.length === 0 && (
+                          <MenuItem disabled>No clients found</MenuItem>
+                        )}
                         {clients.map((client) => (
                           <MenuItem value={client.id} key={client.id}>
-                            {client.name}
+                            {getClientDisplayName(client)}
                           </MenuItem>
                         ))}
                       </Select>
@@ -373,6 +418,16 @@ function Sales() {
                           value={newClient.name}
                           onChange={(event) =>
                             setNewClient((current) => ({ ...current, name: event.target.value }))
+                          }
+                          fullWidth
+                        />
+                      </MDBox>
+                      <MDBox mb={2}>
+                        <MDInput
+                          label="Client surname"
+                          value={newClient.surname}
+                          onChange={(event) =>
+                            setNewClient((current) => ({ ...current, surname: event.target.value }))
                           }
                           fullWidth
                         />

@@ -21,7 +21,15 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import ClientConsultationDetails from "layouts/clients/ClientConsultationDetails";
 import ClientConsultationPdfPreview from "layouts/clients/ClientConsultationPdfPreview";
-import { initialClients, loadClients, saveClients } from "layouts/clients/clientStore";
+import {
+  createClient,
+  getClient,
+  getClientDisplayName,
+  getClientForm,
+  getClientForms,
+  getClients,
+  getClientTransactions,
+} from "layouts/clients/clientApi";
 import { createConsultationFormsPdf, createConsultationPdf } from "layouts/clients/consultationPdf";
 
 const downloadFile = (fileName, blob) => {
@@ -37,7 +45,7 @@ const downloadFile = (fileName, blob) => {
 
 const getConsultationPdfFileName = (client, form, suffix = "") => {
   const clientName =
-    client.name
+    getClientDisplayName(client)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "client";
@@ -48,8 +56,6 @@ const getConsultationPdfFileName = (client, form, suffix = "") => {
   return `${clientName}-consultations${safeSuffix}-${formDate || "undated"}.pdf`;
 };
 
-const formatSavedAt = (value) => (value ? new Date(value).toLocaleString() : "date unknown");
-
 const formatTransactionDate = (date) =>
   new Intl.DateTimeFormat("en-ZA", {
     day: "2-digit",
@@ -57,28 +63,113 @@ const formatTransactionDate = (date) =>
     year: "numeric",
   }).format(new Date(`${date}T00:00:00`));
 
+const normalizeClientForm = (formId, form, summary) => ({
+  ...form.answers,
+  id: formId,
+  consultationDate: form.date,
+  createdAt: summary?.date ? `${summary.date}T${summary.time || "00:00:00"}` : form.date,
+  treatmentGoal: form.todayTreatmentGoal || form.answers?.treatmentGoal || "",
+});
+
 function Clients() {
-  const [clients, setClients] = useState(initialClients);
+  const [clients, setClients] = useState([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedConsultation, setSelectedConsultation] = useState(null);
+  const [clientTransactions, setClientTransactions] = useState([]);
+  const [clientForms, setClientForms] = useState([]);
+  const [isLoadingClientView, setIsLoadingClientView] = useState(false);
+  const [isLoadingConsultation, setIsLoadingConsultation] = useState(false);
   const [pdfPreview, setPdfPreview] = useState(null);
   const [showAddClient, setShowAddClient] = useState(false);
-  const [newClient, setNewClient] = useState({ name: "", email: "", phone: "", address: "" });
+  const [newClient, setNewClient] = useState({
+    name: "",
+    surname: "",
+    email: "",
+    phone: "",
+    address: "",
+  });
   const [message, setMessage] = useState(null);
   const [modalView, setModalView] = useState("details");
-  const [editedClient, setEditedClient] = useState(null);
   const [transactionDateFilter, setTransactionDateFilter] = useState("");
 
   useEffect(() => {
-    try {
-      setClients(loadClients());
-    } catch (error) {
-      setMessage({
-        color: "error",
-        text: error instanceof Error ? error.message : "Could not load client data.",
-      });
-    }
+    let isMounted = true;
+
+    const loadClientList = async () => {
+      try {
+        const clientList = await getClients();
+        if (isMounted) {
+          setClients(clientList);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessage({
+            color: "error",
+            text: error instanceof Error ? error.message : "Could not load clients.",
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingClients(false);
+        }
+      }
+    };
+
+    loadClientList();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!selectedClient) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    setIsLoadingClientView(true);
+
+    const loadClientView = async () => {
+      try {
+        if (modalView === "details") {
+          const details = await getClient(selectedClient.id);
+          if (isMounted) {
+            setSelectedClient((current) =>
+              current?.id === selectedClient.id ? { ...current, ...details } : current
+            );
+          }
+        } else if (modalView === "transactions") {
+          const transactions = await getClientTransactions(selectedClient.id);
+          if (isMounted) {
+            setClientTransactions(transactions);
+          }
+        } else if (modalView === "consultations") {
+          const forms = await getClientForms(selectedClient.id);
+          if (isMounted) {
+            setClientForms(forms);
+          }
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessage({
+            color: "error",
+            text: error instanceof Error ? error.message : "Could not load client information.",
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingClientView(false);
+        }
+      }
+    };
+
+    loadClientView();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedClient?.id, modalView]);
 
   useEffect(() => {
     if (!pdfPreview) {
@@ -91,56 +182,35 @@ function Clients() {
   const openClientModal = (client, view = "details") => {
     setMessage(null);
     setSelectedClient(client);
-    setEditedClient({ ...client });
     setSelectedConsultation(null);
     setModalView(view);
     setTransactionDateFilter("");
+    setClientTransactions([]);
+    setClientForms([]);
   };
 
   const closeClientModal = () => {
     setSelectedClient(null);
-    setEditedClient(null);
     setSelectedConsultation(null);
     setTransactionDateFilter("");
   };
 
-  const saveClientDetails = () => {
-    const updatedClients = clients.map((client) =>
-      client.id === editedClient.id ? editedClient : client
-    );
-    try {
-      saveClients(updatedClients);
-    } catch (error) {
-      setMessage({
-        color: "error",
-        text: error instanceof Error ? error.message : "Could not save client details.",
-      });
-      return;
-    }
-    setClients(updatedClients);
-    setSelectedClient(editedClient);
-    setModalView("details");
-  };
-
-  const addClient = () => {
-    if (!newClient.name.trim()) {
-      setMessage({ color: "error", text: "Enter the new client's name." });
+  const addClient = async () => {
+    if (!newClient.name.trim() || !newClient.surname.trim() || !newClient.phone.trim()) {
+      setMessage({ color: "error", text: "Enter the client's name, surname, and phone number." });
       return;
     }
 
-    const client = {
-      id: Date.now(),
+    const clientDto = {
       name: newClient.name.trim(),
-      email: newClient.email.trim(),
+      surname: newClient.surname.trim(),
       phone: newClient.phone.trim(),
+      email: newClient.email.trim(),
       address: newClient.address.trim(),
-      consultationForms: [],
-      transactions: [],
     };
-    const updatedClients = [...clients, client];
 
     try {
-      saveClients(updatedClients);
+      await createClient(clientDto);
     } catch (error) {
       setMessage({
         color: "error",
@@ -149,18 +219,25 @@ function Clients() {
       return;
     }
 
-    setClients(updatedClients);
-    setNewClient({ name: "", email: "", phone: "", address: "" });
+    setNewClient({ name: "", surname: "", email: "", phone: "", address: "" });
     setShowAddClient(false);
-    setSelectedClient(client);
-    setEditedClient(client);
-    setModalView("details");
-    setMessage({ color: "success", text: "Client added successfully." });
+    try {
+      setClients(await getClients());
+      setMessage({ color: "success", text: "Client added successfully." });
+    } catch (error) {
+      setMessage({
+        color: "warning",
+        text: `Client added, but the client list could not be refreshed: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+      });
+    }
   };
 
   const downloadConsultationPdf = async (client, form) => {
     try {
-      const pdf = await createConsultationPdf(client, form);
+      const pdfClient = { ...client, name: getClientDisplayName(client) };
+      const pdf = await createConsultationPdf(pdfClient, form);
       downloadFile(
         getConsultationPdfFileName(client, form, `-${form.id}`),
         new Blob([pdf], { type: "application/pdf" })
@@ -177,7 +254,8 @@ function Clients() {
 
   const openConsultationPdfPreview = async (client, form) => {
     try {
-      const pdf = await createConsultationPdf(client, form);
+      const pdfClient = { ...client, name: getClientDisplayName(client) };
+      const pdf = await createConsultationPdf(pdfClient, form);
       const url = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
       setPdfPreview({
         url,
@@ -196,12 +274,21 @@ function Clients() {
 
   const exportAllConsultations = async () => {
     try {
-      const forms = selectedClient?.consultationForms || [];
-      if (forms.length === 0) {
+      if (selectedConsultations.length === 0) {
         throw new Error("This client has no consultation forms to export.");
       }
 
-      const pdf = await createConsultationFormsPdf(selectedClient, forms);
+      const forms = await Promise.all(
+        selectedConsultations.map(async (summary) => {
+          if (summary.localForm) {
+            return summary.localForm;
+          }
+
+          return normalizeClientForm(summary.id, await getClientForm(summary.id), summary);
+        })
+      );
+      const pdfClient = { ...selectedClient, name: getClientDisplayName(selectedClient) };
+      const pdf = await createConsultationFormsPdf(pdfClient, forms);
       const fileDate = new Date().toISOString().slice(0, 10);
       downloadFile(
         getConsultationPdfFileName(selectedClient, { consultationDate: fileDate }),
@@ -215,10 +302,42 @@ function Clients() {
     }
   };
 
-  const selectedConsultations = [...(selectedClient?.consultationForms || [])].sort(
+  const openConsultationForm = async (summary) => {
+    if (summary.localForm) {
+      setSelectedConsultation(summary.localForm);
+      return;
+    }
+
+    setIsLoadingConsultation(true);
+    setMessage(null);
+    try {
+      const form = await getClientForm(summary.id);
+      setSelectedConsultation(normalizeClientForm(summary.id, form, summary));
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not load the consultation form.",
+      });
+    } finally {
+      setIsLoadingConsultation(false);
+    }
+  };
+
+  const selectedConsultations = [
+    ...clientForms.map((form) => ({ ...form, source: "api" })),
+    ...(selectedClient?.consultationForms || []).map((form) => ({
+      id: form.id,
+      date: form.consultationDate || form.createdAt?.slice(0, 10) || "",
+      time: form.createdAt ? new Date(form.createdAt).toLocaleTimeString() : "",
+      source: "local",
+      localForm: form,
+    })),
+  ].sort(
     (first, second) =>
-      new Date(second.createdAt || second.consultationDate).getTime() -
-      new Date(first.createdAt || first.consultationDate).getTime()
+      new Date(
+        second.localForm?.createdAt || `${second.date}T${second.time || "00:00:00"}`
+      ).getTime() -
+      new Date(first.localForm?.createdAt || `${first.date}T${first.time || "00:00:00"}`).getTime()
   );
 
   return (
@@ -230,7 +349,7 @@ function Clients() {
             Clients
           </MDTypography>
           <MDTypography variant="body2" color="text">
-            Select a client to update their details or view their transactions.
+            Select a client to view their details, transactions, or consultation forms.
           </MDTypography>
         </MDBox>
         {message && !showAddClient && !selectedClient && (
@@ -245,20 +364,30 @@ function Clients() {
             variant="gradient"
             color="primary"
             onClick={() => {
-              setNewClient({ name: "", email: "", phone: "", address: "" });
+              setNewClient({ name: "", surname: "", email: "", phone: "", address: "" });
               setShowAddClient(true);
             }}
           >
             Add client
           </MDButton>
         </MDBox>
+        {isLoadingClients && (
+          <MDTypography variant="body2" color="text" mb={2}>
+            Loading clients...
+          </MDTypography>
+        )}
+        {!isLoadingClients && clients.length === 0 && (
+          <MDTypography variant="body2" color="text" mb={2}>
+            No clients found.
+          </MDTypography>
+        )}
         <Grid container spacing={3}>
           {clients.map((client) => (
             <Grid item xs={12} md={6} lg={4} key={client.id}>
               <Card>
                 <MDBox p={3}>
                   <MDBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                    <MDTypography variant="h6">{client.name}</MDTypography>
+                    <MDTypography variant="h6">{getClientDisplayName(client)}</MDTypography>
                   </MDBox>
                   <MDTypography variant="body2" color="text">
                     {client.email}
@@ -298,7 +427,7 @@ function Clients() {
       <Footer />
 
       <Dialog open={Boolean(selectedClient)} onClose={closeClientModal} fullWidth maxWidth="md">
-        <DialogTitle>{selectedClient?.name}</DialogTitle>
+        <DialogTitle>{selectedClient ? getClientDisplayName(selectedClient) : ""}</DialogTitle>
         <DialogContent sx={{ px: 3, pt: 2, pb: 2 }}>
           {message && selectedClient && (
             <MDBox mb={2}>
@@ -318,7 +447,11 @@ function Clients() {
             <Tab label="Transactions" value="transactions" />
             <Tab label="Consultation forms" value="consultations" />
           </Tabs>
-          {modalView === "transactions" ? (
+          {isLoadingClientView ? (
+            <MDTypography variant="body2" color="text">
+              Loading client information...
+            </MDTypography>
+          ) : modalView === "transactions" ? (
             <MDBox>
               <MDBox mb={2} mt={1} px={1}>
                 <MDInput
@@ -330,65 +463,77 @@ function Clients() {
                   fullWidth
                 />
               </MDBox>
-              {selectedClient?.transactions
+              {clientTransactions
                 .filter(
                   (transaction) =>
                     !transactionDateFilter || transaction.date === transactionDateFilter
                 )
-                .map((transaction) => (
-                  <Card
-                    key={`${transaction.date}-${transaction.time}`}
-                    sx={{ mb: 2, boxShadow: "none" }}
-                  >
-                    <MDBox
-                      p={2}
-                      sx={{ border: "1px solid", borderColor: "divider", borderRadius: "0.75rem" }}
+                .map((transaction) => {
+                  const saleLines = [
+                    ...(transaction.treatments || []).map((treatment) => ({
+                      name: treatment.name,
+                      amount: Number(treatment.retailPrice) || 0,
+                    })),
+                    ...(transaction.products || []).map((product) => ({
+                      name: `${product.name} × ${product.quantity}`,
+                      amount: (Number(product.retailPrice) || 0) * (Number(product.quantity) || 0),
+                    })),
+                  ];
+                  const total = saleLines.reduce((sum, line) => sum + line.amount, 0);
+
+                  return (
+                    <Card
+                      key={`${transaction.date}-${transaction.time}`}
+                      sx={{ mb: 2, boxShadow: "none" }}
                     >
                       <MDBox
-                        display="flex"
-                        justifyContent="space-between"
-                        alignItems="flex-start"
-                        mb={1}
+                        p={2}
+                        sx={{
+                          border: "1px solid",
+                          borderColor: "divider",
+                          borderRadius: "0.75rem",
+                        }}
                       >
-                        <MDBox>
-                          <MDTypography variant="button" fontWeight="medium" display="block">
-                            {formatTransactionDate(transaction.date)}
-                          </MDTypography>
-                          <MDTypography variant="caption" color="text">
-                            Time: {transaction.time}
-                          </MDTypography>
-                        </MDBox>
-                        <MDTypography variant="h6" fontWeight="medium">
-                          {transaction.total}
-                        </MDTypography>
-                      </MDBox>
-                      <MDTypography variant="caption" color="text" display="block">
-                        Payment method: {transaction.paymentMethod}
-                      </MDTypography>
-                      <MDTypography variant="caption" color="text" display="block" mb={1}>
-                        Visit type: {transaction.visitType}
-                      </MDTypography>
-                      {transaction.saleLines.map((saleLine) => (
                         <MDBox
-                          key={saleLine.name}
                           display="flex"
                           justifyContent="space-between"
-                          py={0.5}
+                          alignItems="flex-start"
+                          mb={1}
                         >
-                          <MDTypography variant="caption" color="text">
-                            {saleLine.name}
-                          </MDTypography>
-                          <MDTypography variant="caption" fontWeight="medium">
-                            {saleLine.amount}
+                          <MDBox>
+                            <MDTypography variant="button" fontWeight="medium" display="block">
+                              {formatTransactionDate(transaction.date)}
+                            </MDTypography>
+                            <MDTypography variant="caption" color="text">
+                              Time: {transaction.time}
+                            </MDTypography>
+                          </MDBox>
+                          <MDTypography variant="h6" fontWeight="medium">
+                            R{total.toFixed(2)}
                           </MDTypography>
                         </MDBox>
-                      ))}
-                    </MDBox>
-                  </Card>
-                ))}
-              {(!selectedClient?.transactions.length ||
+                        {saleLines.map((saleLine) => (
+                          <MDBox
+                            key={saleLine.name}
+                            display="flex"
+                            justifyContent="space-between"
+                            py={0.5}
+                          >
+                            <MDTypography variant="caption" color="text">
+                              {saleLine.name}
+                            </MDTypography>
+                            <MDTypography variant="caption" fontWeight="medium">
+                              R{saleLine.amount.toFixed(2)}
+                            </MDTypography>
+                          </MDBox>
+                        ))}
+                      </MDBox>
+                    </Card>
+                  );
+                })}
+              {(!clientTransactions.length ||
                 (transactionDateFilter &&
-                  !selectedClient.transactions.some(
+                  !clientTransactions.some(
                     (transaction) => transaction.date === transactionDateFilter
                   ))) && (
                 <MDTypography variant="body2" color="text">
@@ -437,19 +582,20 @@ function Clients() {
                     >
                       <MDBox>
                         <MDTypography variant="button" display="block">
-                          Consultation on {form.consultationDate || "date not recorded"}
+                          Consultation on {form.date || "date not recorded"}
                         </MDTypography>
                         <MDTypography variant="caption" color="text">
-                          Saved {formatSavedAt(form.createdAt)}
+                          {form.time ? `Time: ${form.time}` : ""}
                         </MDTypography>
                       </MDBox>
                       <MDBox display="flex" gap={1} flexWrap="wrap">
                         <MDButton
                           variant="text"
                           color="primary"
-                          onClick={() => setSelectedConsultation(form)}
+                          onClick={() => openConsultationForm(form)}
+                          disabled={isLoadingConsultation}
                         >
-                          View form
+                          {isLoadingConsultation ? "Loading..." : "View form"}
                         </MDButton>
                       </MDBox>
                     </MDBox>
@@ -463,44 +609,28 @@ function Clients() {
             </MDBox>
           ) : (
             <MDBox pt={1}>
+              <MDTypography variant="caption" color="text" display="block" mb={2}>
+                Client details are read-only because the current API does not provide an update
+                endpoint.
+              </MDTypography>
               <MDBox mb={2}>
-                <MDInput
-                  label="Name"
-                  value={editedClient?.name || ""}
-                  onChange={(event) =>
-                    setEditedClient({ ...editedClient, name: event.target.value })
-                  }
-                  fullWidth
-                />
+                <MDInput label="Name" value={selectedClient?.name || ""} disabled fullWidth />
+              </MDBox>
+              <MDBox mb={2}>
+                <MDInput label="Surname" value={selectedClient?.surname || ""} disabled fullWidth />
               </MDBox>
               <MDBox mb={2}>
                 <MDInput
                   type="email"
                   label="Email"
-                  value={editedClient?.email || ""}
-                  onChange={(event) =>
-                    setEditedClient({ ...editedClient, email: event.target.value })
-                  }
+                  value={selectedClient?.email || ""}
+                  disabled
                   fullWidth
                 />
               </MDBox>
-              <MDInput
-                label="Phone"
-                value={editedClient?.phone || ""}
-                onChange={(event) =>
-                  setEditedClient({ ...editedClient, phone: event.target.value })
-                }
-                fullWidth
-              />
+              <MDInput label="Phone" value={selectedClient?.phone || ""} disabled fullWidth />
               <MDBox mt={2}>
-                <MDInput
-                  label="Address"
-                  value={editedClient?.address || ""}
-                  onChange={(event) =>
-                    setEditedClient({ ...editedClient, address: event.target.value })
-                  }
-                  fullWidth
-                />
+                <MDInput label="Address" value={selectedClient?.address || ""} disabled fullWidth />
               </MDBox>
             </MDBox>
           )}
@@ -509,11 +639,6 @@ function Clients() {
           <MDButton variant="text" color="dark" onClick={closeClientModal}>
             close
           </MDButton>
-          {modalView === "details" && (
-            <MDButton variant="gradient" color="primary" onClick={saveClientDetails}>
-              save details
-            </MDButton>
-          )}
         </DialogActions>
       </Dialog>
 
@@ -534,6 +659,16 @@ function Clients() {
                 value={newClient.name}
                 onChange={(event) =>
                   setNewClient((current) => ({ ...current, name: event.target.value }))
+                }
+                fullWidth
+              />
+            </MDBox>
+            <MDBox mb={2}>
+              <MDInput
+                label="Surname"
+                value={newClient.surname}
+                onChange={(event) =>
+                  setNewClient((current) => ({ ...current, surname: event.target.value }))
                 }
                 fullWidth
               />
