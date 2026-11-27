@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Card from "@mui/material/Card";
 import FormControl from "@mui/material/FormControl";
@@ -19,12 +19,14 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { api } from "layouts/authentication/apiClient";
+import { getAuthToken } from "layouts/authentication/authService";
+import { createClient, getClientDisplayName, getClients } from "layouts/clients/clientApi";
+import ClientConsultationForm from "layouts/clients/ClientConsultationForm";
+import { saveClientConsultation } from "layouts/clients/clientStore";
 
-const treatments = [
-  { id: "TREAT-001", name: "Deep Cleansing Facial", price: 650 },
-  { id: "TREAT-002", name: "Body Sculpting", price: 850 },
-  { id: "TREAT-003", name: "Skin Renewal Peel", price: 750 },
-];
+const SALES_STORAGE_KEY = "skinzone-sales";
+const TREATMENT_LIST_ENDPOINT = "/treatment/treatments";
 
 const products = [
   { id: "PROD-001", name: "GENOP Cleanser", price: 280 },
@@ -33,14 +35,13 @@ const products = [
   { id: "PROD-004", name: "Evolution Serum", price: 520 },
 ];
 
-const initialClients = [
-  { id: 1, name: "John Michael", contactNumber: "071 123 4567" },
-  { id: 2, name: "Alexa Liras", contactNumber: "072 987 6543" },
-];
-
 function Sales() {
-  const [clients, setClients] = useState(initialClients);
+  const [treatments, setTreatments] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
+  const [consultationClient, setConsultationClient] = useState(null);
   const [sales, setSales] = useState([]);
+  const [isSalesLoaded, setIsSalesLoaded] = useState(false);
   const [saleForm, setSaleForm] = useState({
     clientId: "",
     paymentMethod: "",
@@ -49,7 +50,13 @@ function Sales() {
     productIds: [],
     quantity: 1,
   });
-  const [newClient, setNewClient] = useState({ name: "", contactNumber: "" });
+  const [newClient, setNewClient] = useState({
+    name: "",
+    surname: "",
+    phone: "",
+    email: "",
+    address: "",
+  });
   const [showAddClient, setShowAddClient] = useState(false);
   const [message, setMessage] = useState(null);
   const [report, setReport] = useState(null);
@@ -58,6 +65,100 @@ function Sales() {
   const [endDate, setEndDate] = useState("");
   const [treatmentSearch, setTreatmentSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadClientList = async () => {
+      try {
+        const clientList = await getClients();
+        if (isMounted) {
+          setClients(clientList);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessage({
+            color: "error",
+            text: error instanceof Error ? error.message : "Could not load clients.",
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingClients(false);
+        }
+      }
+    };
+
+    loadClientList();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadData = async () => {
+      try {
+        const storedSales = localStorage.getItem(SALES_STORAGE_KEY);
+        const savedSales = storedSales ? JSON.parse(storedSales) : [];
+
+        if (!Array.isArray(savedSales)) {
+          throw new Error("Saved sales data is not in the expected format.");
+        }
+
+        if (isMounted) {
+          setSales(savedSales);
+          setIsSalesLoaded(true);
+        }
+
+        const token = await getAuthToken();
+        const treatmentList = await api.get(TREATMENT_LIST_ENDPOINT, token);
+
+        if (!Array.isArray(treatmentList)) {
+          throw new Error("The treatment list response was not a list.");
+        }
+
+        if (isMounted) {
+          setTreatments(
+            treatmentList.map((treatment) => ({
+              id: treatment.id,
+              name: treatment.name,
+              price: treatment.retailPrice,
+            }))
+          );
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessage({
+            color: "error",
+            text: error instanceof Error ? error.message : "Could not load sales data.",
+          });
+        }
+      }
+    };
+
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSalesLoaded) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(sales));
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not save sales data.",
+      });
+    }
+  }, [isSalesLoaded, sales]);
 
   const selectedTreatments = treatments.filter((item) => saleForm.treatmentIds.includes(item.id));
   const selectedProducts = products.filter((item) => saleForm.productIds.includes(item.id));
@@ -70,22 +171,80 @@ function Sales() {
   const updateSaleForm = (field) => (event) =>
     setSaleForm((current) => ({ ...current, [field]: event.target.value }));
 
-  const addClient = () => {
-    if (!newClient.name.trim() || !newClient.contactNumber.trim()) {
-      setMessage({ color: "error", text: "Enter the new client's name and contact number." });
+  const selectedClient = clients.find((client) => client.id === Number(saleForm.clientId));
+
+  const saveConsultation = (answers) => {
+    try {
+      const updatedClients = saveClientConsultation(clients, consultationClient.id, answers);
+      const updatedClient = updatedClients.find((client) => client.id === consultationClient.id);
+      setClients(updatedClients);
+      setConsultationClient(updatedClient);
+      setMessage({ color: "success", text: "Consultation form saved successfully." });
+      return true;
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not save the consultation form.",
+      });
+      return false;
+    }
+  };
+
+  const addClient = async () => {
+    if (!newClient.name.trim() || !newClient.surname.trim() || !newClient.phone.trim()) {
+      setMessage({
+        color: "error",
+        text: "Enter the new client's name, surname, and phone number.",
+      });
       return;
     }
 
-    const client = {
-      id: Date.now(),
+    const clientDto = {
       name: newClient.name.trim(),
-      contactNumber: newClient.contactNumber.trim(),
+      surname: newClient.surname.trim(),
+      phone: newClient.phone.trim(),
+      email: newClient.email.trim(),
+      address: newClient.address.trim(),
     };
-    setClients((current) => [...current, client]);
-    setSaleForm((current) => ({ ...current, clientId: client.id }));
-    setNewClient({ name: "", contactNumber: "" });
+
+    try {
+      await createClient(clientDto);
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: error instanceof Error ? error.message : "Could not add the client.",
+      });
+      return;
+    }
+
+    setNewClient({ name: "", surname: "", phone: "", email: "", address: "" });
     setShowAddClient(false);
-    setMessage({ color: "success", text: "Client added successfully." });
+    try {
+      const refreshedClients = await getClients();
+      setClients(refreshedClients);
+      const createdClient = refreshedClients.find(
+        (client) =>
+          client.name.toLowerCase() === clientDto.name.toLowerCase() &&
+          client.surname.toLowerCase() === clientDto.surname.toLowerCase() &&
+          client.phone === clientDto.phone
+      );
+      if (createdClient) {
+        setSaleForm((current) => ({ ...current, clientId: createdClient.id }));
+      }
+      setMessage({
+        color: createdClient ? "success" : "warning",
+        text: createdClient
+          ? "Client added and selected."
+          : "Client added, but could not find it in the refreshed list.",
+      });
+    } catch (error) {
+      setMessage({
+        color: "warning",
+        text: `Client added, but the client list could not be refreshed: ${
+          error instanceof Error ? error.message : "Unknown error."
+        }`,
+      });
+    }
   };
 
   const saveSale = (event) => {
@@ -216,14 +375,33 @@ function Sales() {
                         onChange={updateSaleForm("clientId")}
                         sx={{ minHeight: 56 }}
                       >
+                        {isLoadingClients && <MenuItem disabled>Loading clients...</MenuItem>}
+                        {!isLoadingClients && clients.length === 0 && (
+                          <MenuItem disabled>No clients found</MenuItem>
+                        )}
                         {clients.map((client) => (
                           <MenuItem value={client.id} key={client.id}>
-                            {client.name}
+                            {getClientDisplayName(client)}
                           </MenuItem>
                         ))}
                       </Select>
                     </FormControl>
                   </MDBox>
+                  {selectedClient && (
+                    <MDBox mb={1}>
+                      <MDButton
+                        type="button"
+                        variant="text"
+                        color="primary"
+                        onClick={() => {
+                          setMessage(null);
+                          setConsultationClient(selectedClient);
+                        }}
+                      >
+                        New consultation form
+                      </MDButton>
+                    </MDBox>
+                  )}
                   <MDButton
                     type="button"
                     variant="text"
@@ -244,14 +422,42 @@ function Sales() {
                           fullWidth
                         />
                       </MDBox>
+                      <MDBox mb={2}>
+                        <MDInput
+                          label="Client surname"
+                          value={newClient.surname}
+                          onChange={(event) =>
+                            setNewClient((current) => ({ ...current, surname: event.target.value }))
+                          }
+                          fullWidth
+                        />
+                      </MDBox>
+                      <MDBox mb={2}>
+                        <MDInput
+                          label="Phone number"
+                          value={newClient.phone}
+                          onChange={(event) =>
+                            setNewClient((current) => ({ ...current, phone: event.target.value }))
+                          }
+                          fullWidth
+                        />
+                      </MDBox>
+                      <MDBox mb={2}>
+                        <MDInput
+                          type="email"
+                          label="Email"
+                          value={newClient.email}
+                          onChange={(event) =>
+                            setNewClient((current) => ({ ...current, email: event.target.value }))
+                          }
+                          fullWidth
+                        />
+                      </MDBox>
                       <MDInput
-                        label="Contact number"
-                        value={newClient.contactNumber}
+                        label="Address"
+                        value={newClient.address}
                         onChange={(event) =>
-                          setNewClient((current) => ({
-                            ...current,
-                            contactNumber: event.target.value,
-                          }))
+                          setNewClient((current) => ({ ...current, address: event.target.value }))
                         }
                         fullWidth
                       />
@@ -332,7 +538,7 @@ function Sales() {
                           )
                           .map((item) => (
                             <MenuItem value={item.id} key={item.id}>
-                              {item.name}
+                              {item.name} — R{Number(item.price).toFixed(2)}
                             </MenuItem>
                           ))}
                       </Select>
@@ -485,6 +691,13 @@ function Sales() {
           </Grid>
         </Grid>
       </MDBox>
+      {consultationClient && (
+        <ClientConsultationForm
+          client={consultationClient}
+          onClose={() => setConsultationClient(null)}
+          onSave={saveConsultation}
+        />
+      )}
       <Footer />
     </DashboardLayout>
   );

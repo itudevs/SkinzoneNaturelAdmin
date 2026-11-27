@@ -24,59 +24,26 @@ import MDTypography from "components/MDTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { api } from "layouts/authentication/apiClient";
+import { getAuthToken } from "layouts/authentication/authService";
 
-const initialStock = [
-  {
-    id: 1,
-    name: "Cleanser",
-    dateReceived: "2026-11-01",
-    amountAvailable: 12,
-    clinicalPrice: 280,
-    retailPrice: 350,
-    category: "GENOP",
-  },
-  {
-    id: 2,
-    name: "Moisturiser",
-    dateReceived: "2026-11-03",
-    amountAvailable: 8,
-    clinicalPrice: 650,
-    retailPrice: 780,
-    category: "Lamelle",
-  },
-  {
-    id: 3,
-    name: "Sunscreen",
-    dateReceived: "2026-11-05",
-    amountAvailable: 20,
-    clinicalPrice: 450,
-    retailPrice: 550,
-    category: "Fargon",
-  },
-  {
-    id: 4,
-    name: "Serum",
-    dateReceived: "2026-11-08",
-    amountAvailable: 15,
-    clinicalPrice: 520,
-    retailPrice: 630,
-    category: "Evolution",
-  },
-];
+const getErrorMessage = (error, fallback) => (error instanceof Error ? error.message : fallback);
+const formatProductPrice = (price) => {
+  if (price === null || price === undefined || price === "") {
+    return "N/A";
+  }
 
-const initialCategories = ["GENOP", "Lamelle", "Fargon", "Evolution"];
+  const numericPrice = Number(price);
+  return Number.isFinite(numericPrice) ? `R${numericPrice.toFixed(2)}` : "N/A";
+};
+
 const ADD_CATEGORY = "__add_category";
 
 function Stock() {
-  const [stockItems, setStockItems] = useState(initialStock);
-  const [categories, setCategories] = useState(() => {
-    try {
-      const savedCategories = JSON.parse(localStorage.getItem("stockCategories"));
-      return Array.isArray(savedCategories) ? savedCategories : initialCategories;
-    } catch {
-      return initialCategories;
-    }
-  });
+  const [stockItems, setStockItems] = useState([]);
+  const [isLoadingStock, setIsLoadingStock] = useState(true);
+  const [stockLoadError, setStockLoadError] = useState(false);
+  const [categories, setCategories] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
@@ -96,12 +63,66 @@ function Stock() {
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
-    localStorage.setItem("stockCategories", JSON.stringify(categories));
-  }, [categories]);
+    let isMounted = true;
+
+    const loadStockItems = async () => {
+      try {
+        const token = await getAuthToken();
+        const products = await api.get("/stock/products", token);
+
+        if (products !== null && products !== undefined && !Array.isArray(products)) {
+          throw new Error("The stock products response was not a list.");
+        }
+
+        if (isMounted) {
+          setStockItems(products || []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setStockLoadError(true);
+          setMessage({
+            color: "error",
+            text: getErrorMessage(error, "Could not load stock products."),
+          });
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingStock(false);
+        }
+      }
+    };
+
+    loadStockItems();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const token = await getAuthToken();
+        const productCategories = await api.get("/stock/categories", token);
+        setCategories(productCategories);
+      } catch (error) {
+        setMessage({
+          color: "error",
+          text: getErrorMessage(error, "Could not load product categories."),
+        });
+      }
+    };
+
+    loadCategories();
+  }, []);
+
   const filteredStockItems = stockItems.filter(
     (item) =>
+      item &&
       (categoryFilter === "All" || item.category === categoryFilter) &&
-      item.name.toLowerCase().includes(searchTerm.toLowerCase())
+      String(item.name ?? "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase())
   );
 
   const updateForm = (field) => (event) =>
@@ -113,7 +134,7 @@ function Stock() {
     setCategoryDialogOpen(true);
   };
 
-  const addCategory = () => {
+  const addCategory = async () => {
     const categoryName = newCategoryName.trim();
 
     if (!categoryName) {
@@ -130,18 +151,32 @@ function Stock() {
       return;
     }
 
-    setCategories((current) => [...current, categoryName]);
-    if (categoryTarget === "filter") {
-      setCategoryFilter(categoryName);
-    } else {
-      setForm((current) => ({ ...current, category: categoryName }));
+    try {
+      const token = await getAuthToken();
+      const categoryAdded = await api.post("/stock/add/category", categoryName, token);
+
+      if (!categoryAdded) {
+        throw new Error("The category could not be added.");
+      }
+
+      setCategories((current) => [...current, categoryName]);
+      if (categoryTarget === "filter") {
+        setCategoryFilter(categoryName);
+      } else {
+        setForm((current) => ({ ...current, category: categoryName }));
+      }
+      setCategoryDialogOpen(false);
+      setNewCategoryName("");
+      setMessage({ color: "success", text: `${categoryName} category added successfully.` });
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, `Could not add ${categoryName}.`),
+      });
     }
-    setCategoryDialogOpen(false);
-    setNewCategoryName("");
-    setMessage({ color: "success", text: `${categoryName} category added successfully.` });
   };
 
-  const addStockItem = (event) => {
+  const addStockItem = async (event) => {
     event.preventDefault();
 
     if (
@@ -175,66 +210,33 @@ function Stock() {
       return;
     }
 
-    if (editingItemId) {
-      setStockItems((current) =>
-        current.map((item) =>
-          item.id === editingItemId
-            ? {
-                ...item,
-                name: form.name.trim(),
-                dateReceived: form.dateReceived,
-                category: form.category,
-                amountAvailable,
-                clinicalPrice,
-                retailPrice,
-              }
-            : item
-        )
-      );
-      setEditingItemId(null);
-      setMessage({ color: "success", text: "Stock item updated successfully." });
-    } else {
-      setStockItems((current) => [
-        ...current,
-        {
-          id: Date.now(),
-          name: form.name.trim(),
-          dateReceived: form.dateReceived,
-          category: form.category,
-          amountAvailable,
-          clinicalPrice,
-          retailPrice,
-        },
-      ]);
-      setMessage({ color: "success", text: "Stock item added successfully." });
-    }
-    setForm({
-      name: "",
-      dateReceived: "",
-      category: "",
-      amountAvailable: "",
-      clinicalPrice: "",
-      retailPrice: "",
-    });
-  };
+    const product = {
+      ...(editingItemId ? { id: editingItemId } : {}),
+      name: form.name.trim(),
+      dateReceived: form.dateReceived,
+      category: form.category,
+      amountAvailable,
+      clinicalPrice,
+      retailPrice,
+    };
 
-  const editStockItem = (item) => {
-    setEditingItemId(item.id);
-    setForm({
-      name: item.name,
-      dateReceived: item.dateReceived,
-      category: item.category,
-      amountAvailable: item.amountAvailable,
-      clinicalPrice: item.clinicalPrice,
-      retailPrice: item.retailPrice ?? "",
-    });
-    setMessage(null);
-  };
+    try {
+      const token = await getAuthToken();
+      const savedProduct = editingItemId
+        ? await api.post("/stock/update", product, token)
+        : await api.post("/stock/add", product, token);
 
-  const deleteStockItem = (item) => {
-    setStockItems((current) => current.filter((stockItem) => stockItem.id !== item.id));
-    if (editingItemId === item.id) {
-      setEditingItemId(null);
+      if (editingItemId) {
+        setStockItems((current) =>
+          current.map((item) => (item.id === editingItemId ? savedProduct : item))
+        );
+        setEditingItemId(null);
+        setMessage({ color: "success", text: "Stock item updated successfully." });
+      } else {
+        setStockItems((current) => [...current, savedProduct]);
+        setMessage({ color: "success", text: "Stock item added successfully." });
+      }
+
       setForm({
         name: "",
         dateReceived: "",
@@ -243,11 +245,61 @@ function Stock() {
         clinicalPrice: "",
         retailPrice: "",
       });
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, "Could not save the stock item."),
+      });
     }
-    setMessage({ color: "success", text: `${item.name} was deleted successfully.` });
   };
 
-  const addStock = () => {
+  const editStockItem = (item) => {
+    setEditingItemId(item.id);
+    setForm({
+      name: item.name ?? "",
+      dateReceived: item.dateReceived ?? "",
+      category: item.category ?? "",
+      amountAvailable: item.amountAvailable ?? "",
+      clinicalPrice: item.clinicalPrice ?? "",
+      retailPrice: item.retailPrice ?? "",
+    });
+    setMessage(null);
+  };
+
+  const deleteStockItem = async (item) => {
+    try {
+      const token = await getAuthToken();
+      const deleted = await api.get(`/stock/remove/${item.id}`, token);
+
+      if (!deleted) {
+        throw new Error("The stock item could not be deleted.");
+      }
+
+      setStockItems((current) => current.filter((stockItem) => stockItem.id !== item.id));
+      if (editingItemId === item.id) {
+        setEditingItemId(null);
+        setForm({
+          name: "",
+          dateReceived: "",
+          category: "",
+          amountAvailable: "",
+          clinicalPrice: "",
+          retailPrice: "",
+        });
+      }
+      setMessage({
+        color: "success",
+        text: `${item.name || "Product"} was deleted successfully.`,
+      });
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, `Could not delete ${item.name || "product"}.`),
+      });
+    }
+  };
+
+  const addStock = async () => {
     const amount = Number(restockAmount);
 
     if (!Number.isInteger(amount) || amount < 1) {
@@ -258,16 +310,26 @@ function Stock() {
       return;
     }
 
-    setStockItems((current) =>
-      current.map((item) =>
-        item.id === restockItem.id
-          ? { ...item, amountAvailable: item.amountAvailable + amount }
-          : item
-      )
-    );
-    setMessage({ color: "success", text: `Added ${amount} to ${restockItem.name} stock.` });
-    setRestockItem(null);
-    setRestockAmount("");
+    const updatedProduct = {
+      ...restockItem,
+      amountAvailable: restockItem.amountAvailable + amount,
+    };
+
+    try {
+      const token = await getAuthToken();
+      const savedProduct = await api.post("/stock/update", updatedProduct, token);
+      setStockItems((current) =>
+        current.map((item) => (item.id === savedProduct.id ? savedProduct : item))
+      );
+      setMessage({ color: "success", text: `Added ${amount} to ${restockItem.name} stock.` });
+      setRestockItem(null);
+      setRestockAmount("");
+    } catch (error) {
+      setMessage({
+        color: "error",
+        text: getErrorMessage(error, `Could not add stock to ${restockItem.name}.`),
+      });
+    }
   };
 
   return (
@@ -276,7 +338,7 @@ function Stock() {
       <MDBox pt={6} pb={3}>
         <MDBox mb={3}>
           <MDTypography variant="h4" fontWeight="medium">
-            Manage Stock
+            Stock List
           </MDTypography>
           <MDTypography variant="body2" color="text">
             Add, view, and remove products from the stock list.
@@ -337,7 +399,15 @@ function Stock() {
                   </FormControl>
                 </MDBox>
                 <MDBox mt={1}>
-                  {filteredStockItems.length ? (
+                  {isLoadingStock ? (
+                    <MDTypography variant="body2" color="text">
+                      Loading stock products...
+                    </MDTypography>
+                  ) : stockLoadError ? (
+                    <MDTypography variant="body2" color="text">
+                      Stock products could not be loaded.
+                    </MDTypography>
+                  ) : filteredStockItems.length ? (
                     filteredStockItems.map((item) => (
                       <MDBox
                         key={item.id}
@@ -349,21 +419,22 @@ function Stock() {
                       >
                         <MDBox>
                           <MDTypography variant="button" fontWeight="medium" display="block">
-                            {item.name}
+                            {item.name || "Unnamed product"}
                           </MDTypography>
                           <MDTypography variant="caption" color="text">
-                            {item.category} | Received: {item.dateReceived} | Available:{" "}
-                            {item.amountAvailable}
+                            {item.category || "Uncategorized"} | Received:{" "}
+                            {item.dateReceived || "N/A"} | Available:{" "}
+                            {item.amountAvailable ?? "N/A"}
                           </MDTypography>
                         </MDBox>
                         <MDBox display="flex" alignItems="center">
                           <MDTypography variant="button" fontWeight="medium" mr={1}>
-                            R{(item.retailPrice ?? item.clinicalPrice).toFixed(2)}
+                            {formatProductPrice(item.retailPrice ?? item.clinicalPrice)}
                           </MDTypography>
                           <IconButton
                             size="small"
                             color="primary"
-                            aria-label={`Edit ${item.name}`}
+                            aria-label={`Edit ${item.name || "product"}`}
                             onClick={() => editStockItem(item)}
                           >
                             <Icon fontSize="small">edit</Icon>
@@ -371,7 +442,7 @@ function Stock() {
                           <IconButton
                             size="small"
                             color="success"
-                            aria-label={`Add stock for ${item.name}`}
+                            aria-label={`Add stock for ${item.name || "product"}`}
                             onClick={() => {
                               setRestockItem(item);
                               setRestockAmount("");
@@ -382,7 +453,7 @@ function Stock() {
                           <IconButton
                             size="small"
                             color="error"
-                            aria-label={`Delete ${item.name}`}
+                            aria-label={`Delete ${item.name || "product"}`}
                             onClick={() => deleteStockItem(item)}
                           >
                             <Icon fontSize="small">delete</Icon>

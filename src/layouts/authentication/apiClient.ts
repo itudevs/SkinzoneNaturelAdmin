@@ -31,12 +31,12 @@ async function request<TResponse, TBody = unknown>(
     throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
   }
 
-  // Handle empty responses (e.g., 204 No Content)
-  if (response.status === 204) {
+  const responseBody = await response.text();
+  if (!responseBody.trim()) {
     return undefined as TResponse;
   }
 
-  return response.json() as Promise<TResponse>;
+  return JSON.parse(responseBody) as TResponse;
 }
 
 export const api = {
